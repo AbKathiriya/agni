@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -23,6 +24,7 @@ import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.ChevronLeft
 import androidx.compose.material.icons.rounded.ChevronRight
 import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.Remove
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material3.AlertDialog
@@ -94,6 +96,9 @@ fun FoodScreen() {
     var preferredMeal by remember { mutableStateOf<Meal?>(null) }
     var saveMealFor by remember { mutableStateOf<Meal?>(null) }
     var createFood by remember { mutableStateOf(false) }
+    var editingFood by remember { mutableStateOf<Food?>(null) }
+    var showMyFoods by remember { mutableStateOf(false) }
+    val customFoods by vm.customFoods.collectAsStateWithLifecycle()
 
     val target = snap?.target ?: 1550
     val focus = remember { FocusRequester() }
@@ -136,12 +141,17 @@ fun FoodScreen() {
         if (query.isNotBlank()) {
             items(results, key = { it.id }) { f ->
                 AgniCard(onClick = { sheet = Sheet.Add(f) }, padding = 14.dp) {
-                    Row {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
                         Column(Modifier.weight(1f)) {
                             Text(f.name, style = MaterialTheme.typography.titleSmall)
                             Muted("1 ${f.unit} · ${f.category}", style = MaterialTheme.typography.bodySmall)
                         }
                         Text("${f.kcal.kcal()} kcal", style = MaterialTheme.typography.bodyMedium)
+                        if (f.custom) {
+                            IconButton(onClick = { editingFood = f }) {
+                                Icon(Icons.Rounded.Edit, contentDescription = "Edit ${f.name}")
+                            }
+                        }
                     }
                 }
             }
@@ -156,6 +166,13 @@ fun FoodScreen() {
                     }
                     frequent.filter { it.useCount > 0 }.take(5).forEach { f ->
                         AssistChip(onClick = { sheet = Sheet.Add(f) }, label = { Text(f.name) })
+                    }
+                    if (customFoods.isNotEmpty()) {
+                        AssistChip(
+                            onClick = { showMyFoods = true },
+                            label = { Text("My foods (${customFoods.size})") },
+                            leadingIcon = { Icon(Icons.Rounded.Edit, null, Modifier.size(16.dp)) },
+                        )
                     }
                 }
             }
@@ -204,13 +221,69 @@ fun FoodScreen() {
 
     if (createFood) {
         CustomFoodDialog(
+            existing = null,
             initialName = query.trim(),
             onConfirm = { name, unit, k, p, cb, f ->
                 createFood = false
                 vm.createFood(name, unit, k, p, cb, f) { food -> sheet = Sheet.Add(food) }
             },
+            onDelete = null,
             onDismiss = { createFood = false },
         )
+    }
+
+    if (showMyFoods) {
+        MyFoodsSheet(
+            foods = customFoods,
+            onEdit = { editingFood = it },
+            onDismiss = { showMyFoods = false },
+        )
+    }
+
+    editingFood?.let { food ->
+        CustomFoodDialog(
+            existing = food,
+            initialName = food.name,
+            onConfirm = { name, unit, k, p, cb, f ->
+                vm.updateFood(food.copy(name = name, unit = unit, kcal = k, protein = p, carbs = cb, fat = f))
+                editingFood = null
+            },
+            onDelete = {
+                vm.deleteFood(food)
+                editingFood = null
+                if (customFoods.size <= 1) showMyFoods = false
+            },
+            onDismiss = { editingFood = null },
+        )
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun MyFoodsSheet(foods: List<Food>, onEdit: (Food) -> Unit, onDismiss: () -> Unit) {
+    ModalBottomSheet(onDismissRequest = onDismiss) {
+        Column(Modifier.padding(horizontal = 20.dp).padding(bottom = 28.dp)) {
+            Text("My foods", style = MaterialTheme.typography.titleLarge)
+            Muted("Tap a food to edit or delete it.", style = MaterialTheme.typography.bodySmall)
+            LazyColumn(Modifier.heightIn(max = 480.dp).padding(top = 8.dp)) {
+                items(foods, key = { it.id }) { f ->
+                    Row(
+                        Modifier.fillMaxWidth().heightIn(min = 56.dp).clickable { onEdit(f) },
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Column(Modifier.weight(1f)) {
+                            Text(f.name, style = MaterialTheme.typography.bodyLarge)
+                            Muted(
+                                "1 ${f.unit} · ${f.kcal.kcal()} kcal · ${f.protein.roundToInt()} g protein",
+                                style = MaterialTheme.typography.bodySmall,
+                            )
+                        }
+                        Icon(Icons.Rounded.Edit, contentDescription = "Edit ${f.name}", tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                }
+            }
+        }
     }
 }
 
@@ -338,19 +411,34 @@ private fun NameDialog(title: String, initial: String, onConfirm: (String) -> Un
 
 @Composable
 private fun CustomFoodDialog(
+    existing: Food?,
     initialName: String,
     onConfirm: (String, String, Double, Double, Double, Double) -> Unit,
+    onDelete: (() -> Unit)?,
     onDismiss: () -> Unit,
 ) {
     var name by remember { mutableStateOf(initialName) }
-    var unit by remember { mutableStateOf("katori") }
-    var kcal by remember { mutableStateOf("") }
-    var protein by remember { mutableStateOf("") }
-    var carbs by remember { mutableStateOf("") }
-    var fat by remember { mutableStateOf("") }
+    var unit by remember { mutableStateOf(existing?.unit ?: "katori") }
+    var kcal by remember { mutableStateOf(existing?.kcal?.short().orEmpty()) }
+    var protein by remember { mutableStateOf(existing?.protein?.short().orEmpty()) }
+    var carbs by remember { mutableStateOf(existing?.carbs?.short().orEmpty()) }
+    var fat by remember { mutableStateOf(existing?.fat?.short().orEmpty()) }
+    var confirmDelete by remember { mutableStateOf(false) }
+
+    if (confirmDelete && onDelete != null) {
+        AlertDialog(
+            onDismissRequest = { confirmDelete = false },
+            title = { Text("Delete “$name”?") },
+            text = { Text("It disappears from search and quick meals. Days you already logged it keep their calories.") },
+            confirmButton = { TextButton(onClick = onDelete) { Text("Delete", color = MaterialTheme.colorScheme.error) } },
+            dismissButton = { TextButton(onClick = { confirmDelete = false }) { Text("Cancel") } },
+        )
+        return
+    }
+
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Custom food") },
+        title = { Text(if (existing == null) "Custom food" else "Edit food") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedTextField(name, { name = it }, label = { Text("Name") }, singleLine = true)
@@ -360,6 +448,15 @@ private fun CustomFoodDialog(
                     NumberField("Protein", protein, { protein = it }, Modifier.weight(1f), "g")
                     NumberField("Carbs", carbs, { carbs = it }, Modifier.weight(1f), "g")
                     NumberField("Fat", fat, { fat = it }, Modifier.weight(1f), "g")
+                }
+                if (existing != null) {
+                    Muted("Changes apply from now on. Meals you already logged keep their old values.", style = MaterialTheme.typography.bodySmall)
+                }
+                if (onDelete != null) {
+                    OutlinedButton(
+                        onClick = { confirmDelete = true },
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.error),
+                    ) { Text("Delete food", color = MaterialTheme.colorScheme.error) }
                 }
             }
         },

@@ -39,6 +39,15 @@ interface FoodDao {
 
     @Query("UPDATE foods SET useCount = useCount + 1 WHERE id = :id")
     suspend fun bumpUse(id: Long)
+
+    @Query("SELECT * FROM foods WHERE custom = 1 ORDER BY name COLLATE NOCASE")
+    fun customFoods(): Flow<List<Food>>
+
+    @Update
+    suspend fun update(food: Food)
+
+    @Delete
+    suspend fun delete(food: Food)
 }
 
 @Dao
@@ -81,6 +90,13 @@ interface SavedMealDao {
 
     @Query("DELETE FROM saved_meal_items WHERE savedMealId = :id")
     suspend fun deleteItems(id: Long)
+
+    /** Removes a deleted food from quick meals; quick meals left empty are removed too. */
+    @Query("DELETE FROM saved_meal_items WHERE foodId = :foodId")
+    suspend fun deleteItemsForFood(foodId: Long)
+
+    @Query("DELETE FROM saved_meals WHERE id NOT IN (SELECT DISTINCT savedMealId FROM saved_meal_items)")
+    suspend fun deleteEmptyMeals()
 
     @Query("SELECT COUNT(*) FROM saved_meals")
     suspend fun count(): Int

@@ -35,6 +35,7 @@ class FoodViewModel(private val c: AppContainer) : ViewModel() {
 
     val frequent = c.db.foods().frequent().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
     val savedMeals = c.db.savedMeals().all().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+    val customFoods = c.db.foods().customFoods().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
     val snapshot: StateFlow<Snapshot?> = c.engine.snapshot().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
     fun shiftDay(days: Long) {
@@ -93,6 +94,16 @@ class FoodViewModel(private val c: AppContainer) : ViewModel() {
     fun deleteSavedMeal(meal: SavedMeal) = viewModelScope.launch {
         c.db.savedMeals().deleteItems(meal.id)
         c.db.savedMeals().delete(meal.id)
+    }
+
+    /** Changes apply to future logging. Meals already logged keep the values they were logged with. */
+    fun updateFood(food: Food) = viewModelScope.launch { c.db.foods().update(food) }
+
+    /** Past logs are kept (they store their own copy); the food leaves search and any quick meals. */
+    fun deleteFood(food: Food) = viewModelScope.launch {
+        c.db.foods().delete(food)
+        c.db.savedMeals().deleteItemsForFood(food.id)
+        c.db.savedMeals().deleteEmptyMeals()
     }
 
     fun createFood(name: String, unit: String, kcal: Double, protein: Double, carbs: Double, fat: Double, then: (Food) -> Unit) =
