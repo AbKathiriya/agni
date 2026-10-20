@@ -8,7 +8,11 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.DeleteOutline
 import androidx.compose.material.icons.rounded.PlayArrow
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -20,7 +24,21 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewModelScope
+import androidx.lifecycle.viewmodel.compose.viewModel
+import com.akash.agni.AppContainer
+import com.akash.agni.container
+import com.akash.agni.data.WorkoutSession
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.launch
+import java.time.Instant
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
 import androidx.navigation.NavHostController
 import com.akash.agni.data.Plan
 import com.akash.agni.data.Workout
@@ -32,10 +50,27 @@ import java.time.LocalDate
 import java.time.format.TextStyle
 import java.util.Locale
 
+class WorkoutViewModel(private val c: AppContainer) : ViewModel() {
+    val history = c.db.workouts().recent().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    /** Removes a session everywhere: its sets, the day's workout XP (if no other workout that day), Health Connect. */
+    fun delete(session: WorkoutSession) = viewModelScope.launch {
+        val w = c.db.workouts()
+        w.deleteSets(session.id)
+        w.deleteSession(session.id)
+        if (w.completedOn(session.day) == 0) c.db.xp().revoke(session.day, "workout")
+        c.health.deleteWorkout(session.id)
+    }
+}
+
 @Composable
 fun WorkoutScreen(nav: NavHostController) {
+    val c = LocalContext.current.container
+    val vm: WorkoutViewModel = viewModel { WorkoutViewModel(c) }
+    val history by vm.history.collectAsStateWithLifecycle()
     val today = LocalDate.now().dayOfWeek
     var expanded by remember { mutableStateOf<DayOfWeek?>(today) }
+    var deleting by remember { mutableStateOf<WorkoutSession?>(null) }
 
     LazyColumn(
         Modifier.fillMaxSize(),
@@ -56,6 +91,52 @@ fun WorkoutScreen(nav: NavHostController) {
                 onToggle = { expanded = if (expanded == day) null else day },
                 onStart = { w?.let { nav.startWorkout(it.id) } },
             )
+        }
+        if (history.isNotEmpty()) {
+            item {
+                Text("History", Modifier.padding(top = 8.dp), style = MaterialTheme.typography.titleMedium)
+                Muted("Started one by mistake? Delete it here.", style = MaterialTheme.typography.bodySmall)
+            }
+            items(history, key = { it.id }) { session ->
+                HistoryRow(session, onDelete = { deleting = session })
+            }
+        }
+    }
+
+    deleting?.let { session ->
+        AlertDialog(
+            onDismissRequest = { deleting = null },
+            title = { Text("Delete this workout?") },
+            text = { Text("${session.title} on ${dateTime(session)} will be removed from your history, streak and XP.") },
+            confirmButton = {
+                TextButton(onClick = { vm.delete(session); deleting = null }) {
+                    Text("Delete", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = { TextButton(onClick = { deleting = null }) { Text("Cancel") } },
+        )
+    }
+}
+
+private fun dateTime(s: WorkoutSession): String =
+    Instant.ofEpochMilli(s.startedAt).atZone(ZoneId.systemDefault())
+        .format(DateTimeFormatter.ofPattern("EEE d MMM, h:mm a"))
+
+@Composable
+private fun HistoryRow(session: WorkoutSession, onDelete: () -> Unit) {
+    val minutes = ((session.endedAt - session.startedAt) / 60_000).coerceAtLeast(0)
+    AgniCard(padding = 14.dp) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text(session.title, style = MaterialTheme.typography.titleSmall)
+                Muted(
+                    dateTime(session) + " · $minutes min · " + if (session.completed) "Completed" else "Partial",
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
+            IconButton(onClick = onDelete) {
+                Icon(Icons.Rounded.DeleteOutline, contentDescription = "Delete ${session.title} on ${dateTime(session)}")
+            }
         }
     }
 }

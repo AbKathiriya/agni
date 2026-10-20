@@ -93,13 +93,36 @@ fun PlayerScreen(workoutId: String, onExit: () -> Unit) {
     BackHandler(enabled = s.phase != Phase.DONE) { confirmExit = true }
 
     if (confirmExit) {
-        AlertDialog(
-            onDismissRequest = { confirmExit = false },
-            title = { Text("End workout?") },
-            text = { Text("Sets you've done are saved. It counts as complete once you've done at least half.") },
-            confirmButton = { TextButton(onClick = { confirmExit = false; vm.finish() }) { Text("Save and finish") } },
-            dismissButton = { TextButton(onClick = { confirmExit = false }) { Text("Keep going") } },
-        )
+        if (s.setsDone == 0) {
+            // Started by mistake: nothing to save, just leave.
+            AlertDialog(
+                onDismissRequest = { confirmExit = false },
+                title = { Text("Leave workout?") },
+                text = { Text("Nothing has been logged yet, so nothing will be saved.") },
+                confirmButton = { TextButton(onClick = { confirmExit = false; vm.discard(); onExit() }) { Text("Leave") } },
+                dismissButton = { TextButton(onClick = { confirmExit = false }) { Text("Keep going") } },
+            )
+        } else {
+            AlertDialog(
+                onDismissRequest = { confirmExit = false },
+                title = { Text("End workout?") },
+                text = {
+                    Text(
+                        "Save keeps the ${s.setsDone} " + (if (s.setsDone == 1) "set" else "sets") +
+                            " you've done (it counts as complete at half or more). Discard deletes this session."
+                    )
+                },
+                confirmButton = { TextButton(onClick = { confirmExit = false; vm.finish() }) { Text("Save and finish") } },
+                dismissButton = {
+                    Row {
+                        TextButton(onClick = { confirmExit = false; vm.discard(); onExit() }) {
+                            Text("Discard", color = MaterialTheme.colorScheme.error)
+                        }
+                        TextButton(onClick = { confirmExit = false }) { Text("Keep going") }
+                    }
+                },
+            )
+        }
     }
 
     videoUrl?.let { VideoDialog(it, onClose = { videoUrl = null }) }

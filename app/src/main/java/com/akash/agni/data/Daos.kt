@@ -103,6 +103,21 @@ interface WorkoutDao {
     @Query("SELECT COUNT(*) FROM workout_sessions WHERE completed = 1")
     fun completedCount(): Flow<Int>
 
+    @Query("SELECT * FROM workout_sessions ORDER BY startedAt DESC LIMIT 20")
+    fun recent(): Flow<List<WorkoutSession>>
+
+    @Query("SELECT COUNT(*) FROM set_logs WHERE sessionId = :sessionId")
+    suspend fun setCount(sessionId: Long): Int
+
+    @Query("SELECT COUNT(*) FROM workout_sessions WHERE day = :day AND completed = 1")
+    suspend fun completedOn(day: Long): Int
+
+    @Query("DELETE FROM set_logs WHERE sessionId = :sessionId")
+    suspend fun deleteSets(sessionId: Long)
+
+    @Query("DELETE FROM workout_sessions WHERE id = :sessionId")
+    suspend fun deleteSession(sessionId: Long)
+
     /** Most recent sets for an exercise, used to pre-fill weight and reps. */
     @Query("SELECT * FROM set_logs WHERE exerciseId = :exerciseId ORDER BY id DESC LIMIT 10")
     suspend fun recentSets(exerciseId: String): List<SetLog>
@@ -142,6 +157,9 @@ interface XpDao {
 
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun award(event: XpEvent): Long
+
+    @Query("DELETE FROM xp_events WHERE day = :day AND type = :type")
+    suspend fun revoke(day: Long, type: String)
 }
 
 @Dao

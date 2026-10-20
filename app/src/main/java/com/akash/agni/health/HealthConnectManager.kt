@@ -156,7 +156,7 @@ class HealthConnectManager(private val context: Context) {
         }.getOrNull()
     }
 
-    suspend fun writeWorkout(title: String, start: Instant, end: Instant, cardioOnly: Boolean): Boolean {
+    suspend fun writeWorkout(sessionId: Long, title: String, start: Instant, end: Instant, cardioOnly: Boolean): Boolean {
         val c = client ?: return false
         if (!has(HealthPermission.getWritePermission(ExerciseSessionRecord::class))) return false
         return runCatching {
@@ -170,11 +170,18 @@ class HealthConnectManager(private val context: Context) {
                         exerciseType = if (cardioOnly) ExerciseSessionRecord.EXERCISE_TYPE_WALKING
                         else ExerciseSessionRecord.EXERCISE_TYPE_STRENGTH_TRAINING,
                         title = title,
+                        metadata = Metadata(clientRecordId = "agni-workout-$sessionId", clientRecordVersion = 1),
                     )
                 )
             )
             true
         }.getOrDefault(false)
+    }
+
+    suspend fun deleteWorkout(sessionId: Long) {
+        val c = client ?: return
+        if (!has(HealthPermission.getWritePermission(ExerciseSessionRecord::class))) return
+        runCatching { c.deleteRecords(ExerciseSessionRecord::class, emptyList(), listOf("agni-workout-$sessionId")) }
     }
 
     suspend fun writeNutrition(log: FoodLog): Boolean {

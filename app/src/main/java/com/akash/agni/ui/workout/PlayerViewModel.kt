@@ -196,6 +196,11 @@ class PlayerViewModel(private val c: AppContainer, private val appContext: Conte
         enterWork((s.blockIndex - 1).coerceAtLeast(0), 1)
     }
 
+    /** Throw the session away: nothing is saved, no XP, nothing sent to Health Connect. */
+    fun discard() {
+        _state.update { it.copy(phase = Phase.DONE, running = false) }
+    }
+
     fun finish() {
         if (_state.value.phase == Phase.DONE) return
         _state.update { it.copy(phase = Phase.DONE, running = false) }
@@ -214,7 +219,7 @@ class PlayerViewModel(private val c: AppContainer, private val appContext: Conte
             c.db.workouts().insertSets(sets.map { it.copy(sessionId = id) })
             if (completed) {
                 c.engine.awardWorkout(day, workout)
-                c.health.writeWorkout(workout.title, startedAt, end, workout.cardioOnly)
+                c.health.writeWorkout(id, workout.title, startedAt, end, workout.cardioOnly)
             }
             val minutes = ((end.toEpochMilli() - startedAt.toEpochMilli()) / 60_000).toInt()
             _state.update {
