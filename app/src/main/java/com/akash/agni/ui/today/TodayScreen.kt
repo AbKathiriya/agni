@@ -54,6 +54,7 @@ import com.akash.agni.ui.components.short
 import com.akash.agni.ui.goTab
 import com.akash.agni.ui.startWorkout
 import com.akash.agni.ui.theme.NumberStyle
+import com.akash.agni.update.UpdateCard
 import java.time.LocalTime
 import java.time.format.DateTimeFormatter
 import kotlin.math.abs
@@ -76,6 +77,8 @@ fun TodayScreen(nav: NavHostController) {
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
         Header(s, onLevel = { nav.goTab("rewards") }, onSettings = { nav.navigate("settings") })
+
+        UpdateCard(manual = false)
 
         if (!connected) {
             AgniCard(color = MaterialTheme.colorScheme.primaryContainer, onClick = { nav.navigate("settings") }) {

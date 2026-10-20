@@ -48,6 +48,7 @@ import com.akash.agni.ui.components.Muted
 import com.akash.agni.ui.components.NumberField
 import com.akash.agni.ui.components.commas
 import com.akash.agni.ui.components.short
+import com.akash.agni.update.UpdateCard
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -144,7 +145,9 @@ fun SettingsScreen(onBack: () -> Unit) {
             )
             SettingNumber("Extra calories it needs", s.treatKcal.toString(), "kcal") { v -> v.toIntOrNull()?.let { n -> update { it.copy(treatKcal = n) } } }
         }
-        Muted("Agni 0.1 · data stays on this phone", Modifier.padding(bottom = 16.dp), style = MaterialTheme.typography.bodySmall)
+        UpdateCard(manual = true)
+
+        Muted("Agni · data stays on this phone", Modifier.padding(bottom = 16.dp), style = MaterialTheme.typography.bodySmall)
     }
 }
 

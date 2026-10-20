@@ -7,6 +7,7 @@ import com.akash.agni.data.Seeder
 import com.akash.agni.data.SettingsStore
 import com.akash.agni.domain.Engine
 import com.akash.agni.health.HealthConnectManager
+import com.akash.agni.update.Updater
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -19,6 +20,7 @@ class AppContainer(context: Context) {
     val settings = SettingsStore(context)
     val health = HealthConnectManager(context)
     val engine = Engine(db, settings)
+    val updater = Updater(context)
 
     init {
         scope.launch {
