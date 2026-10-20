@@ -94,22 +94,35 @@ interface WorkoutDao {
     @Insert
     suspend fun insertSets(sets: List<SetLog>)
 
-    @Query("SELECT * FROM workout_sessions WHERE day BETWEEN :from AND :to ORDER BY startedAt")
+    @Query("SELECT * FROM workout_sessions WHERE hidden = 0 AND day BETWEEN :from AND :to ORDER BY startedAt")
     fun sessions(from: Long, to: Long): Flow<List<WorkoutSession>>
 
-    @Query("SELECT * FROM workout_sessions WHERE day BETWEEN :from AND :to")
+    @Query("SELECT * FROM workout_sessions WHERE hidden = 0 AND day BETWEEN :from AND :to")
     suspend fun sessionsOnce(from: Long, to: Long): List<WorkoutSession>
 
-    @Query("SELECT COUNT(*) FROM workout_sessions WHERE completed = 1")
+    @Query("SELECT COUNT(*) FROM workout_sessions WHERE completed = 1 AND hidden = 0")
     fun completedCount(): Flow<Int>
 
-    @Query("SELECT * FROM workout_sessions ORDER BY startedAt DESC LIMIT 20")
+    @Query("SELECT * FROM workout_sessions WHERE hidden = 0 ORDER BY startedAt DESC LIMIT 30")
     fun recent(): Flow<List<WorkoutSession>>
+
+    @Query("SELECT * FROM workout_sessions WHERE externalId = :externalId LIMIT 1")
+    suspend fun byExternalId(externalId: String): WorkoutSession?
+
+    /** An Agni workout that overlaps the given time window (e.g. the watch tracked the same session). */
+    @Query("SELECT * FROM workout_sessions WHERE source = 'agni' AND startedAt < :end AND endedAt > :start LIMIT 1")
+    suspend fun agniOverlapping(start: Long, end: Long): WorkoutSession?
+
+    @Update
+    suspend fun update(session: WorkoutSession)
+
+    @Query("UPDATE workout_sessions SET hidden = 1, completed = 0 WHERE id = :sessionId")
+    suspend fun hide(sessionId: Long)
 
     @Query("SELECT COUNT(*) FROM set_logs WHERE sessionId = :sessionId")
     suspend fun setCount(sessionId: Long): Int
 
-    @Query("SELECT COUNT(*) FROM workout_sessions WHERE day = :day AND completed = 1")
+    @Query("SELECT COUNT(*) FROM workout_sessions WHERE day = :day AND completed = 1 AND hidden = 0")
     suspend fun completedOn(day: Long): Int
 
     @Query("DELETE FROM set_logs WHERE sessionId = :sessionId")

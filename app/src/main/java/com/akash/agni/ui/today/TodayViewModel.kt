@@ -45,6 +45,7 @@ class TodayViewModel(private val c: AppContainer) : ViewModel() {
         _connected.value = c.health.status() == HealthConnectManager.Status.AVAILABLE && c.health.hasAll()
         _health.value = c.health.today()
         importWeightFromHealth()
+        c.importer.sync()
     }
 
     /** Pulls a newer weigh-in (e.g. from a Samsung Health scale entry) into the progress log. */

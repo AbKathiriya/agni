@@ -25,8 +25,8 @@ class PermissionsRationaleActivity : ComponentActivity() {
                     Column(Modifier.padding(24.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
                         Text("How Agni uses your health data", style = MaterialTheme.typography.headlineSmall)
                         Text(
-                            "Agni is a personal app. It reads steps, active calories, heart rate and weight " +
-                                "from Health Connect to show your daily progress, and writes your workouts, meals " +
+                            "Agni is a personal app. It reads steps, distance, active calories, heart rate, weight " +
+                                "and workouts recorded by your watch from Health Connect to show your progress, and writes your workouts, meals " +
                                 "and weigh-ins back so Samsung Health and other apps see them. Data stays on this " +
                                 "phone and is never sent anywhere else.",
                             style = MaterialTheme.typography.bodyLarge,

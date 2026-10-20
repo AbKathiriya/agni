@@ -61,7 +61,7 @@ data class SavedMealItem(
     val servings: Double,
 )
 
-@Entity(tableName = "workout_sessions", indices = [Index("day")])
+@Entity(tableName = "workout_sessions", indices = [Index("day"), Index("externalId")])
 data class WorkoutSession(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val day: Long,
@@ -72,7 +72,18 @@ data class WorkoutSession(
     val kcal: Double? = null,
     val avgHr: Int? = null,
     val completed: Boolean = true,
-)
+    /** "agni" for workouts done in this app, otherwise the app it was imported from (e.g. "Samsung Health"). */
+    val source: String = "agni",
+    /** Health Connect record id for imported sessions; used to never import the same one twice. */
+    val externalId: String? = null,
+    val exerciseType: Int? = null,
+    val steps: Long? = null,
+    val distanceM: Double? = null,
+    /** Imported sessions you deleted (or merged into an Agni workout) stay as hidden markers. */
+    val hidden: Boolean = false,
+) {
+    val imported get() = externalId != null
+}
 
 @Entity(tableName = "set_logs", indices = [Index("sessionId"), Index("exerciseId")])
 data class SetLog(

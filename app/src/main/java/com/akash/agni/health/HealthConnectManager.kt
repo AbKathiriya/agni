@@ -9,6 +9,7 @@ import androidx.health.connect.client.PermissionController
 import androidx.health.connect.client.aggregate.AggregateMetric
 import androidx.health.connect.client.permission.HealthPermission
 import androidx.health.connect.client.records.ActiveCaloriesBurnedRecord
+import androidx.health.connect.client.records.DistanceRecord
 import androidx.health.connect.client.records.ExerciseSessionRecord
 import androidx.health.connect.client.records.HeartRateRecord
 import androidx.health.connect.client.records.MealType
@@ -16,6 +17,7 @@ import androidx.health.connect.client.records.NutritionRecord
 import androidx.health.connect.client.records.StepsRecord
 import androidx.health.connect.client.records.WeightRecord
 import androidx.health.connect.client.records.metadata.Metadata
+import androidx.health.connect.client.request.AggregateGroupByPeriodRequest
 import androidx.health.connect.client.request.AggregateRequest
 import androidx.health.connect.client.request.ReadRecordsRequest
 import androidx.health.connect.client.time.TimeRangeFilter
@@ -25,6 +27,7 @@ import com.akash.agni.data.FoodLog
 import com.akash.agni.data.Meal
 import java.time.Instant
 import java.time.LocalDate
+import java.time.Period
 import java.time.ZoneId
 import java.time.ZoneOffset
 import java.time.temporal.ChronoUnit
@@ -45,6 +48,8 @@ class HealthConnectManager(private val context: Context) {
         HealthPermission.getReadPermission(WeightRecord::class),
         HealthPermission.getWritePermission(WeightRecord::class),
         HealthPermission.getWritePermission(ExerciseSessionRecord::class),
+        HealthPermission.getReadPermission(ExerciseSessionRecord::class),
+        HealthPermission.getReadPermission(DistanceRecord::class),
         HealthPermission.getWritePermission(NutritionRecord::class),
     )
 
@@ -77,6 +82,95 @@ class HealthConnectManager(private val context: Context) {
     private suspend fun has(permission: String) = granted().contains(permission)
 
     data class Today(val steps: Long, val activeKcal: Double)
+
+    /** A workout another app (Samsung Health, Google Fit…) recorded, with stats from its time window. */
+    data class ExternalWorkout(
+        val id: String,
+        val app: String,
+        val title: String?,
+        val type: Int,
+        val start: Instant,
+        val end: Instant,
+        val steps: Long?,
+        val distanceM: Double?,
+        val kcal: Double?,
+        val avgHr: Int?,
+    )
+
+    /** Workouts recorded by other apps since [since]; Agni's own records are skipped. */
+    suspend fun externalWorkouts(since: Instant): List<ExternalWorkout> {
+        val c = client ?: return emptyList()
+        if (!has(HealthPermission.getReadPermission(ExerciseSessionRecord::class))) return emptyList()
+        val sessions = runCatching {
+            c.readRecords(
+                ReadRecordsRequest(
+                    recordType = ExerciseSessionRecord::class,
+                    timeRangeFilter = TimeRangeFilter.between(since, Instant.now()),
+                )
+            ).records
+        }.getOrElse { return emptyList() }
+        val granted = granted()
+        val canSteps = HealthPermission.getReadPermission(StepsRecord::class) in granted
+        val canDistance = HealthPermission.getReadPermission(DistanceRecord::class) in granted
+        val canKcal = HealthPermission.getReadPermission(ActiveCaloriesBurnedRecord::class) in granted
+        val canHr = HealthPermission.getReadPermission(HeartRateRecord::class) in granted
+        return sessions
+            .filter { it.metadata.dataOrigin.packageName != context.packageName }
+            .map { s ->
+                val metrics = buildSet<AggregateMetric<*>> {
+                    if (canSteps) add(StepsRecord.COUNT_TOTAL)
+                    if (canDistance) add(DistanceRecord.DISTANCE_TOTAL)
+                    if (canKcal) add(ActiveCaloriesBurnedRecord.ACTIVE_CALORIES_TOTAL)
+                    if (canHr) add(HeartRateRecord.BPM_AVG)
+                }
+                val r = if (metrics.isEmpty()) null else runCatching {
+                    c.aggregate(AggregateRequest(metrics, TimeRangeFilter.between(s.startTime, s.endTime)))
+                }.getOrNull()
+                ExternalWorkout(
+                    id = s.metadata.id,
+                    app = appName(s.metadata.dataOrigin.packageName),
+                    title = s.title,
+                    type = s.exerciseType,
+                    start = s.startTime,
+                    end = s.endTime,
+                    steps = r?.get(StepsRecord.COUNT_TOTAL)?.takeIf { it > 0 },
+                    distanceM = r?.get(DistanceRecord.DISTANCE_TOTAL)?.inMeters?.takeIf { it > 0 },
+                    kcal = r?.get(ActiveCaloriesBurnedRecord.ACTIVE_CALORIES_TOTAL)?.inKilocalories?.takeIf { it > 0 },
+                    avgHr = r?.get(HeartRateRecord.BPM_AVG)?.toInt(),
+                )
+            }
+    }
+
+    /** Total steps per day for the last [days] days, oldest first. */
+    suspend fun stepsByDay(days: Int): List<Pair<LocalDate, Long>> {
+        val c = client ?: return emptyList()
+        if (!has(HealthPermission.getReadPermission(StepsRecord::class))) return emptyList()
+        val today = LocalDate.now()
+        val start = today.minusDays((days - 1).toLong()).atStartOfDay()
+        val end = today.plusDays(1).atStartOfDay()
+        return runCatching {
+            val rows = c.aggregateGroupByPeriod(
+                AggregateGroupByPeriodRequest(
+                    metrics = setOf(StepsRecord.COUNT_TOTAL),
+                    timeRangeFilter = TimeRangeFilter.between(start, end),
+                    timeRangeSlicer = Period.ofDays(1),
+                )
+            ).associate { it.startTime.toLocalDate() to (it.result[StepsRecord.COUNT_TOTAL] ?: 0L) }
+            (0 until days).map { i -> today.minusDays((days - 1 - i).toLong()).let { d -> d to (rows[d] ?: 0L) } }
+        }.getOrDefault(emptyList())
+    }
+
+    private fun appName(pkg: String): String = when (pkg) {
+        "com.sec.android.app.shealth" -> "Samsung Health"
+        "com.google.android.apps.fitness" -> "Google Fit"
+        "com.google.android.apps.healthdata" -> "Health Connect"
+        "com.fitbit.FitbitMobile" -> "Fitbit"
+        "com.strava" -> "Strava"
+        else -> runCatching {
+            val pm = context.packageManager
+            pm.getApplicationLabel(pm.getApplicationInfo(pkg, 0)).toString()
+        }.getOrDefault("Health Connect")
+    }
 
     suspend fun today(): Today? {
         val c = client ?: return null

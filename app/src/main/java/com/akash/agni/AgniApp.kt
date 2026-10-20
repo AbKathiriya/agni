@@ -5,6 +5,7 @@ import android.content.Context
 import com.akash.agni.data.AgniDatabase
 import com.akash.agni.data.Seeder
 import com.akash.agni.data.SettingsStore
+import com.akash.agni.domain.ActivityImporter
 import com.akash.agni.domain.Engine
 import com.akash.agni.health.HealthConnectManager
 import com.akash.agni.update.Updater
@@ -21,6 +22,7 @@ class AppContainer(context: Context) {
     val health = HealthConnectManager(context)
     val engine = Engine(db, settings)
     val updater = Updater(context)
+    val importer = ActivityImporter(db, health, settings)
 
     init {
         scope.launch {
