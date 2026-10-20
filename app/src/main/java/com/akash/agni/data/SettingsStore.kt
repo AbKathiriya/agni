@@ -29,6 +29,8 @@ data class Settings(
     val treatKcal: Int = 400,
     val startDay: Long = LocalDate.now().toEpochDay(),
     val startWeightKg: Double = 80.0,
+    val weightUnit: WeightUnit = WeightUnit.KG,
+    val lengthUnit: LengthUnit = LengthUnit.IN,
 )
 
 private val Context.dataStore by preferencesDataStore("settings")
@@ -48,6 +50,8 @@ class SettingsStore(private val context: Context) {
         val treatKcal = intPreferencesKey("treat_kcal")
         val startDay = longPreferencesKey("start_day")
         val startWeight = doublePreferencesKey("start_weight")
+        val weightUnit = stringPreferencesKey("weight_unit")
+        val lengthUnit = stringPreferencesKey("length_unit")
     }
 
     val settings: Flow<Settings> = context.dataStore.data.map(::read)
@@ -68,6 +72,8 @@ class SettingsStore(private val context: Context) {
             treatKcal = p[K.treatKcal] ?: d.treatKcal,
             startDay = p[K.startDay] ?: d.startDay,
             startWeightKg = p[K.startWeight] ?: d.startWeightKg,
+            weightUnit = p[K.weightUnit]?.let { runCatching { WeightUnit.valueOf(it) }.getOrNull() } ?: d.weightUnit,
+            lengthUnit = p[K.lengthUnit]?.let { runCatching { LengthUnit.valueOf(it) }.getOrNull() } ?: d.lengthUnit,
         )
     }
 
@@ -85,6 +91,8 @@ class SettingsStore(private val context: Context) {
         p[K.treatKcal] = s.treatKcal
         p[K.startDay] = s.startDay
         p[K.startWeight] = s.startWeightKg
+        p[K.weightUnit] = s.weightUnit.name
+        p[K.lengthUnit] = s.lengthUnit.name
     }
 
     /** Pins the start day on first launch so streaks and the calorie bank have a fixed origin. */

@@ -50,6 +50,10 @@ Every push to `main` builds an APK and a Play bundle (.aab) on GitHub Actions an
 - **Versions**: libraries are pinned (AGP 8.7.3, Kotlin 2.1.0, Health Connect `1.1.0-alpha10`). Newer Health Connect releases changed how record `Metadata` is created; if you upgrade it, replace `Metadata(clientRecordId = …)` with `Metadata.manualEntry(clientRecordId = …)` and add `metadata = Metadata.manualEntry()` to the weight and exercise records in `health/HealthConnectManager.kt`.
 - This was written without an Android SDK available to compile it, so expect a few small fixes on the first build. Paste any build error back to me.
 
+## Units
+
+Settings › Units switches body and lifting weight between kg and lb, and height and measurements between inches and cm. The check-in dialog has its own unit chips, converts anything already typed and remembers your choice. Everything is stored as kg / inches / cm underneath, so switching never changes your history.
+
 ## Watch workouts and steps
 
 Workouts recorded on the Galaxy Watch (or anything else that writes to Health Connect) are imported into Workout › History with duration, calories, average heart rate, steps and distance. Each one is imported once; deleting it here hides it without touching Samsung Health. If it overlaps a workout run in Agni, its watch stats are merged into that workout instead of creating a duplicate. An imported session counts for the day's plan when it lasts 20+ minutes, and on strength days only when it's a strength-type session. The Workout tab also shows the last 7 days of steps.

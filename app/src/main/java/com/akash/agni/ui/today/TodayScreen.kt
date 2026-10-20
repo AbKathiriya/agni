@@ -41,6 +41,8 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavHostController
 import com.akash.agni.container
+import com.akash.agni.data.weight
+import com.akash.agni.data.weightDelta
 import com.akash.agni.domain.Snapshot
 import com.akash.agni.ui.components.AgniCard
 import com.akash.agni.ui.components.KeyValue
@@ -113,9 +115,9 @@ fun TodayScreen(nav: NavHostController) {
                 ProgressBar(((health?.steps ?: 0L).toFloat() / s.settings.stepGoal), color = MaterialTheme.colorScheme.secondary)
             }
             StatTile("Weight", Modifier.weight(1f)) {
-                Text("${s.currentWeight.short()} kg", style = NumberStyle.copy(fontSize = 22.sp))
+                Text(s.settings.weight(s.currentWeight), style = NumberStyle.copy(fontSize = 22.sp))
                 val delta = s.currentWeight - s.settings.startWeightKg
-                Muted(if (abs(delta) < 0.05) "Starting point" else "${if (delta < 0) "−" else "+"}${abs(delta).short()} kg since start", style = MaterialTheme.typography.bodySmall)
+                Muted(if (abs(delta) < 0.05) "Starting point" else "${s.settings.weightDelta(delta)} since start", style = MaterialTheme.typography.bodySmall)
             }
         }
 

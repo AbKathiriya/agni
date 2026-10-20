@@ -49,6 +49,10 @@ import com.akash.agni.AppContainer
 import com.akash.agni.container
 import com.akash.agni.data.GoalType
 import com.akash.agni.data.Reward
+import com.akash.agni.data.Settings
+import com.akash.agni.data.length
+import com.akash.agni.data.oneDp
+import com.akash.agni.data.weight
 import com.akash.agni.domain.DayStatus
 import com.akash.agni.domain.RewardProgress
 import com.akash.agni.ui.components.AgniCard
@@ -146,7 +150,7 @@ fun RewardsScreen() {
         AgniCard(padding = 6.dp) {
             s.rewards.forEachIndexed { i, rp ->
                 if (i > 0) HorizontalDivider(Modifier.padding(horizontal = 10.dp), color = MaterialTheme.colorScheme.outlineVariant)
-                MilestoneRow(rp, onClick = { editing = rp.reward })
+                MilestoneRow(rp, s.settings, onClick = { editing = rp.reward })
             }
         }
     }
@@ -154,6 +158,7 @@ fun RewardsScreen() {
     editing?.let { r ->
         RewardDialog(
             reward = r,
+            st = s.settings,
             onSave = { vm.save(it); editing = null },
             onDelete = if (r.id != 0L) ({ vm.delete(r); editing = null }) else null,
             onDismiss = { editing = null },
@@ -192,7 +197,7 @@ private fun Calendar(history: List<DayStatus>) {
 }
 
 @Composable
-private fun MilestoneRow(rp: RewardProgress, onClick: () -> Unit) {
+private fun MilestoneRow(rp: RewardProgress, st: Settings, onClick: () -> Unit) {
     val r = rp.reward
     Row(
         Modifier.fillMaxWidth().heightIn(min = 64.dp).clickable(onClick = onClick).padding(horizontal = 10.dp),
@@ -208,28 +213,54 @@ private fun MilestoneRow(rp: RewardProgress, onClick: () -> Unit) {
             }
         }
         Column(Modifier.weight(1f).padding(start = 12.dp)) {
-            Text(goalLabel(r), style = MaterialTheme.typography.titleSmall)
+            Text(goalLabel(r, st), style = MaterialTheme.typography.titleSmall)
             Muted(
                 (if (r.unlockedDay != null) "Unlocked: " else "") + r.title +
-                    if (r.unlockedDay == null) " · ${rp.current.short()} of ${r.target.short()}${r.goalType.unit}" else "",
+                    if (r.unlockedDay == null) " · ${amount(r.goalType, rp.current, st)} of ${amount(r.goalType, r.target, st)}" else "",
                 style = MaterialTheme.typography.bodySmall,
             )
         }
     }
 }
 
-private fun goalLabel(r: Reward) = when (r.goalType) {
-    GoalType.WAIST_DOWN_IN -> "−${r.target.short()}″ waist"
-    GoalType.WEIGHT_DOWN_KG -> "−${r.target.short()} kg"
+/** Goal amounts are stored in inches / kg; shown in your chosen units. */
+private fun amount(type: GoalType, stored: Double, st: Settings) = when (type) {
+    GoalType.WAIST_DOWN_IN -> st.length(stored)
+    GoalType.WEIGHT_DOWN_KG -> st.weight(stored)
+    else -> stored.short() + type.unit
+}
+
+private fun toDisplay(type: GoalType, stored: Double, st: Settings) = when (type) {
+    GoalType.WAIST_DOWN_IN -> st.lengthUnit.fromIn(stored)
+    GoalType.WEIGHT_DOWN_KG -> st.weightUnit.fromKg(stored)
+    else -> stored
+}
+
+private fun fromDisplay(type: GoalType, shown: Double, st: Settings) = when (type) {
+    GoalType.WAIST_DOWN_IN -> st.lengthUnit.toIn(shown)
+    GoalType.WEIGHT_DOWN_KG -> st.weightUnit.toKg(shown)
+    else -> shown
+}
+
+private fun unitLabel(type: GoalType, st: Settings) = when (type) {
+    GoalType.WAIST_DOWN_IN -> st.lengthUnit.label
+    GoalType.WEIGHT_DOWN_KG -> st.weightUnit.label
+    else -> type.unit.trim()
+}
+
+private fun goalLabel(r: Reward, st: Settings) = when (r.goalType) {
+    GoalType.WAIST_DOWN_IN -> "−${st.length(r.target)} waist"
+    GoalType.WEIGHT_DOWN_KG -> "−${st.weight(r.target)}"
     GoalType.STREAK_DAYS -> "${r.target.roundToInt()}-day streak"
     GoalType.WORKOUTS -> "${r.target.roundToInt()} workouts"
 }
 
 @Composable
-private fun RewardDialog(reward: Reward, onSave: (Reward) -> Unit, onDelete: (() -> Unit)?, onDismiss: () -> Unit) {
+private fun RewardDialog(reward: Reward, st: Settings, onSave: (Reward) -> Unit, onDelete: (() -> Unit)?, onDismiss: () -> Unit) {
     var title by remember { mutableStateOf(if (reward.title.startsWith("Tap to")) "" else reward.title) }
     var type by remember { mutableStateOf(reward.goalType) }
-    var target by remember { mutableStateOf(reward.target.short()) }
+    val initialTarget = remember { toDisplay(reward.goalType, reward.target, st).oneDp() }
+    var target by remember { mutableStateOf(initialTarget) }
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(if (reward.id == 0L) "New milestone" else "Edit milestone") },
@@ -241,7 +272,7 @@ private fun RewardDialog(reward: Reward, onSave: (Reward) -> Unit, onDelete: (()
                     ChipRow(listOf(GoalType.WAIST_DOWN_IN, GoalType.WEIGHT_DOWN_KG), type, { it.label }, { type = it })
                     ChipRow(listOf(GoalType.STREAK_DAYS, GoalType.WORKOUTS), type, { it.label }, { type = it })
                 }
-                NumberField("Target", target, { target = it }, suffix = type.unit.trim())
+                NumberField("Target", target, { target = it }, suffix = unitLabel(type, st))
                 if (onDelete != null) {
                     OutlinedButton(onClick = onDelete) { Text("Delete milestone", color = MaterialTheme.colorScheme.error) }
                 }
@@ -249,7 +280,9 @@ private fun RewardDialog(reward: Reward, onSave: (Reward) -> Unit, onDelete: (()
         },
         confirmButton = {
             TextButton(onClick = {
-                val t = target.toDoubleOrNull() ?: return@TextButton
+                // Untouched target keeps its exact stored value (no unit round-trip drift).
+                val t = if (type == reward.goalType && target == initialTarget) reward.target
+                else target.toDoubleOrNull()?.let { fromDisplay(type, it, st) } ?: return@TextButton
                 val changedGoal = type != reward.goalType || t != reward.target
                 onSave(
                     reward.copy(

@@ -12,6 +12,9 @@ import com.akash.agni.data.Block
 import com.akash.agni.data.Kind
 import com.akash.agni.data.Plan
 import com.akash.agni.data.SetLog
+import com.akash.agni.data.WeightUnit
+import com.akash.agni.data.oneDp
+import kotlinx.coroutines.flow.first
 import com.akash.agni.data.WorkoutSession
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -64,7 +67,12 @@ class PlayerViewModel(private val c: AppContainer, private val appContext: Conte
 
     private var mediaJob: Job? = null
 
+    /** Lifting weights are kept in kg; shown and stepped in your chosen unit (2.5 kg or 5 lb plates). */
+    private val _unit = MutableStateFlow(WeightUnit.KG)
+    val unit = _unit.asStateFlow()
+
     init {
+        viewModelScope.launch { c.settings.settings.collect { _unit.value = it.weightUnit } }
         enterWork(0, 1)
         viewModelScope.launch { tick() }
         viewModelScope.launch {
@@ -131,19 +139,27 @@ class PlayerViewModel(private val c: AppContainer, private val appContext: Conte
                 val lastWeight = lastSession.firstOrNull()?.weightKg ?: 0.0
                 val target = if (b.repsMax > 0) b.repsMax else b.repsMin
                 val hitTop = lastSession.size >= b.sets && lastSession.all { it.reps >= target }
+                val u = c.settings.settings.first().weightUnit
+                val next = lastWeight + u.stepKg
+                fun show(kg: Double) = "${u.fromKg(kg).oneDp()} ${u.label}"
                 val hint = when {
                     lastSession.isEmpty() -> "First time: pick a weight you could lift 2–3 more reps with."
-                    hitTop && lastWeight > 0 -> "You hit $target on every set last time. Try ${fmt(lastWeight + 2.5)} kg."
-                    lastWeight > 0 -> "Last time: ${fmt(lastWeight)} kg × ${lastSession.joinToString("/") { it.reps.toString() }}"
+                    hitTop && lastWeight > 0 -> "You hit $target on every set last time. Try ${show(next)}."
+                    lastWeight > 0 -> "Last time: ${show(lastWeight)} × ${lastSession.joinToString("/") { it.reps.toString() }}"
                     else -> null
                 }
-                _state.update { it.copy(weightKg = if (hitTop) lastWeight + 2.5 else lastWeight, hint = hint) }
+                _state.update { it.copy(weightKg = if (hitTop) next else lastWeight, hint = hint) }
             }
         }
     }
 
     fun setReps(delta: Int) = _state.update { it.copy(reps = (it.reps + delta).coerceIn(0, 100)) }
-    fun setWeight(delta: Double) = _state.update { it.copy(weightKg = (it.weightKg + delta).coerceIn(0.0, 400.0)) }
+    /** One plate step up or down (+1 / −1) in the chosen unit, snapped so lb values stay whole. */
+    fun stepWeight(direction: Int) = _state.update {
+        val u = _unit.value
+        val shown = Math.round(u.fromKg(it.weightKg) / u.step * 2) / 2.0 * u.step
+        it.copy(weightKg = u.toKg((shown + direction * u.step).coerceIn(0.0, 900.0)))
+    }
     fun toggleRunning() = _state.update { it.copy(running = !it.running) }
 
     /** "Done set" for rep sets; also used to end a timed/cardio block early. */
@@ -238,5 +254,4 @@ class PlayerViewModel(private val c: AppContainer, private val appContext: Conte
         v?.vibrate(VibrationEffect.createOneShot(ms, VibrationEffect.DEFAULT_AMPLITUDE))
     }
 
-    private fun fmt(kg: Double) = if (kg % 1.0 == 0.0) kg.toInt().toString() else "%.1f".format(kg)
 }

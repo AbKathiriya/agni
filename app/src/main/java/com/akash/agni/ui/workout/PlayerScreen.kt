@@ -67,6 +67,7 @@ import kotlinx.coroutines.delay
 import com.akash.agni.container
 import com.akash.agni.data.Block
 import com.akash.agni.data.Kind
+import com.akash.agni.data.oneDp
 import com.akash.agni.ui.components.AgniCard
 import com.akash.agni.ui.components.Muted
 import com.akash.agni.ui.components.Ring
@@ -252,7 +253,8 @@ private fun DemoMedia(block: Block, onVideo: () -> Unit) {
 private fun RepsPanel(s: PlayerState, vm: PlayerViewModel) {
     AgniCard {
         Stepper("Reps", s.reps.toString(), onMinus = { vm.setReps(-1) }, onPlus = { vm.setReps(1) })
-        Stepper("Weight", "${s.weightKg.short()} kg", onMinus = { vm.setWeight(-2.5) }, onPlus = { vm.setWeight(2.5) })
+        val u by vm.unit.collectAsStateWithLifecycle()
+        Stepper("Weight", "${u.fromKg(s.weightKg).oneDp()} ${u.label}", onMinus = { vm.stepWeight(-1) }, onPlus = { vm.stepWeight(1) })
     }
     Button(onClick = vm::completeSet, modifier = Modifier.fillMaxWidth().height(56.dp)) {
         Text("Done set", style = MaterialTheme.typography.titleMedium)

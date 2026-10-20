@@ -46,7 +46,15 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.akash.agni.AppContainer
 import com.akash.agni.container
 import com.akash.agni.data.JournalEntry
+import com.akash.agni.data.LengthUnit
 import com.akash.agni.data.Measurement
+import com.akash.agni.data.Settings
+import com.akash.agni.data.WeightUnit
+import com.akash.agni.data.length
+import com.akash.agni.data.lengthDelta
+import com.akash.agni.data.oneDp
+import com.akash.agni.data.weight
+import com.akash.agni.data.weightDelta
 import com.akash.agni.ui.components.AgniCard
 import com.akash.agni.ui.components.ChipRow
 import com.akash.agni.ui.components.Muted
@@ -66,7 +74,14 @@ class ProgressViewModel(private val c: AppContainer) : ViewModel() {
     val measurements = c.db.measurements().all().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
     val journal = c.db.journal().forDay(today).stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
     val recentJournal = c.db.journal().recent().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+    val settings = c.settings.settings.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), Settings())
 
+    /** The log dialog remembers the units you last used. */
+    fun setUnits(w: WeightUnit, l: LengthUnit) = viewModelScope.launch {
+        c.settings.update { it.copy(weightUnit = w, lengthUnit = l) }
+    }
+
+    /** Values arrive already converted to kg and inches. */
     fun log(weight: Double?, waist: Double?, hips: Double?, thigh: Double?) = viewModelScope.launch {
         if (weight == null && waist == null && hips == null && thigh == null) return@launch
         c.db.measurements().insert(Measurement(day = today, weightKg = weight, waistIn = waist, hipsIn = hips, thighIn = thigh))
@@ -89,6 +104,7 @@ fun ProgressScreen() {
     val ms by vm.measurements.collectAsStateWithLifecycle()
     val journal by vm.journal.collectAsStateWithLifecycle()
     val recent by vm.recentJournal.collectAsStateWithLifecycle()
+    val st by vm.settings.collectAsStateWithLifecycle()
     var range by remember { mutableStateOf(Range.M3) }
     var showLog by remember { mutableStateOf(false) }
 
@@ -117,23 +133,23 @@ fun ProgressScreen() {
             Row(verticalAlignment = Alignment.Bottom) {
                 Column(Modifier.weight(1f)) {
                     Muted("Weight")
-                    Text(allWeights.lastOrNull()?.let { "${it.short()} kg" } ?: "—", style = NumberStyle.copy(fontSize = 28.sp))
+                    Text(allWeights.lastOrNull()?.let { st.weight(it) } ?: "—", style = NumberStyle.copy(fontSize = 28.sp))
                 }
                 if (allWeights.size >= 2) {
                     Text(
-                        (allWeights.last() - allWeights.first()).signed(" kg"),
+                        st.weightDelta(allWeights.last() - allWeights.first()),
                         color = MaterialTheme.colorScheme.secondary, style = MaterialTheme.typography.titleSmall,
                     )
                 }
             }
-            if (weights.size >= 2) WeightChart(weights)
+            if (weights.size >= 2) WeightChart(weights, st)
             else Muted("Weigh in once a week, same time, after waking. The trend matters more than any single day.")
         }
 
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            MeasureTile("Waist", ms.mapNotNull { it.waistIn }, Modifier.weight(1f))
-            MeasureTile("Hips", ms.mapNotNull { it.hipsIn }, Modifier.weight(1f))
-            MeasureTile("Thigh", ms.mapNotNull { it.thighIn }, Modifier.weight(1f))
+            MeasureTile("Waist", ms.mapNotNull { it.waistIn }, st, Modifier.weight(1f))
+            MeasureTile("Hips", ms.mapNotNull { it.hipsIn }, st, Modifier.weight(1f))
+            MeasureTile("Thigh", ms.mapNotNull { it.thighIn }, st, Modifier.weight(1f))
         }
         Button(onClick = { showLog = true }, modifier = Modifier.fillMaxWidth().height(52.dp)) { Text("Log weight & measurements") }
 
@@ -152,24 +168,30 @@ fun ProgressScreen() {
         LogDialog(
             last = last,
             lastWeight = ms.lastOrNull { it.weightKg != null }?.weightKg,
-            onConfirm = { w, wa, h, t -> vm.log(w, wa, h, t); showLog = false },
+            initialWeightUnit = st.weightUnit,
+            initialLengthUnit = st.lengthUnit,
+            onConfirm = { w, wa, h, t, wu, lu ->
+                vm.log(w, wa, h, t)
+                if (wu != st.weightUnit || lu != st.lengthUnit) vm.setUnits(wu, lu)
+                showLog = false
+            },
             onDismiss = { showLog = false },
         )
     }
 }
 
 @Composable
-private fun MeasureTile(label: String, values: List<Double>, modifier: Modifier) {
+private fun MeasureTile(label: String, values: List<Double>, st: Settings, modifier: Modifier) {
     StatTile(label, modifier) {
-        Text(values.lastOrNull()?.let { "${it.short()}″" } ?: "—", style = NumberStyle.copy(fontSize = 20.sp))
+        Text(values.lastOrNull()?.let { st.length(it) } ?: "—", style = NumberStyle.copy(fontSize = 20.sp))
         if (values.size >= 2) {
-            Text((values.last() - values.first()).signed("″"), color = MaterialTheme.colorScheme.secondary, style = MaterialTheme.typography.labelLarge)
+            Text(st.lengthDelta(values.last() - values.first()), color = MaterialTheme.colorScheme.secondary, style = MaterialTheme.typography.labelLarge)
         }
     }
 }
 
 @Composable
-private fun WeightChart(points: List<Measurement>) {
+private fun WeightChart(points: List<Measurement>, st: Settings) {
     val line = MaterialTheme.colorScheme.primary
     val grid = MaterialTheme.colorScheme.outlineVariant
     val ws = points.map { it.weightKg!! }
@@ -179,7 +201,7 @@ private fun WeightChart(points: List<Measurement>) {
     val spanD = (points.last().day - minD).coerceAtLeast(1)
     Canvas(
         Modifier.fillMaxWidth().height(120.dp).semantics {
-            contentDescription = "Weight trend from ${ws.first().short()} to ${ws.last().short()} kg"
+            contentDescription = "Weight trend from ${st.weight(ws.first())} to ${st.weight(ws.last())}"
         }
     ) {
         fun pos(m: Measurement) = Offset(
@@ -217,28 +239,53 @@ private fun JournalCard(entry: JournalEntry?, onSave: (String, Int, Double?) -> 
 private fun LogDialog(
     last: Measurement?,
     lastWeight: Double?,
-    onConfirm: (Double?, Double?, Double?, Double?) -> Unit,
+    initialWeightUnit: WeightUnit,
+    initialLengthUnit: LengthUnit,
+    /** weight (kg), waist, hips, thigh (inches), and the units used, to remember them. */
+    onConfirm: (Double?, Double?, Double?, Double?, WeightUnit, LengthUnit) -> Unit,
     onDismiss: () -> Unit,
 ) {
-    var weight by remember { mutableStateOf(lastWeight?.short().orEmpty()) }
+    var wu by remember { mutableStateOf(initialWeightUnit) }
+    var lu by remember { mutableStateOf(initialLengthUnit) }
+    var weight by remember { mutableStateOf(lastWeight?.let { initialWeightUnit.fromKg(it).oneDp() }.orEmpty()) }
     var waist by remember { mutableStateOf("") }
     var hips by remember { mutableStateOf("") }
     var thigh by remember { mutableStateOf("") }
+
+    // Switching units converts whatever is already typed, so nothing has to be re-entered.
+    fun switchWeight(to: WeightUnit) {
+        weight.toDoubleOrNull()?.let { weight = to.fromKg(wu.toKg(it)).oneDp() }
+        wu = to
+    }
+    fun switchLength(to: LengthUnit) {
+        fun conv(v: String) = v.toDoubleOrNull()?.let { to.fromIn(lu.toIn(it)).oneDp() } ?: v
+        waist = conv(waist); hips = conv(hips); thigh = conv(thigh)
+        lu = to
+    }
+
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Today's check-in") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                NumberField("Weight", weight, { weight = it }, Modifier.fillMaxWidth(), "kg")
-                NumberField("Waist (at navel)", waist, { waist = it }, Modifier.fillMaxWidth(), "in")
-                NumberField("Hips (widest point)", hips, { hips = it }, Modifier.fillMaxWidth(), "in")
-                NumberField("Thigh (widest point)", thigh, { thigh = it }, Modifier.fillMaxWidth(), "in")
+                ChipRow(WeightUnit.entries.toList(), wu, { it.label }, ::switchWeight)
+                NumberField("Weight", weight, { weight = it }, Modifier.fillMaxWidth(), wu.label)
+                ChipRow(LengthUnit.entries.toList(), lu, { it.label }, ::switchLength, Modifier.padding(top = 4.dp))
+                NumberField("Waist (at navel)", waist, { waist = it }, Modifier.fillMaxWidth(), lu.label)
+                NumberField("Hips (widest point)", hips, { hips = it }, Modifier.fillMaxWidth(), lu.label)
+                NumberField("Thigh (widest point)", thigh, { thigh = it }, Modifier.fillMaxWidth(), lu.label)
                 last?.let { Muted("Last: ${LocalDate.ofEpochDay(it.day).format(DateTimeFormatter.ofPattern("d MMM"))}", style = MaterialTheme.typography.bodySmall) }
             }
         },
         confirmButton = {
             TextButton(onClick = {
-                onConfirm(weight.toDoubleOrNull(), waist.toDoubleOrNull(), hips.toDoubleOrNull(), thigh.toDoubleOrNull())
+                onConfirm(
+                    weight.toDoubleOrNull()?.let(wu::toKg),
+                    waist.toDoubleOrNull()?.let(lu::toIn),
+                    hips.toDoubleOrNull()?.let(lu::toIn),
+                    thigh.toDoubleOrNull()?.let(lu::toIn),
+                    wu, lu,
+                )
             }) { Text("Save") }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
