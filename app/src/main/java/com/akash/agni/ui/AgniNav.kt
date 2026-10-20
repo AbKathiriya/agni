@@ -26,6 +26,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import com.akash.agni.ui.coach.CoachScreen
 import com.akash.agni.ui.food.FoodScreen
 import com.akash.agni.ui.progress.ProgressScreen
 import com.akash.agni.ui.rewards.RewardsScreen
@@ -88,6 +89,7 @@ fun AgniNav() {
             composable("progress") { ProgressScreen() }
             composable("rewards") { RewardsScreen() }
             composable("settings") { SettingsScreen(onBack = { nav.popBackStack() }) }
+            composable("coach") { CoachScreen(onBack = { nav.popBackStack() }) }
             composable(
                 "player/{workoutId}",
                 arguments = listOf(navArgument("workoutId") { type = NavType.StringType }),

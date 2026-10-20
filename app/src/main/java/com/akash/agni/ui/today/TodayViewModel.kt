@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.akash.agni.AppContainer
 import com.akash.agni.data.Measurement
 import com.akash.agni.domain.Snapshot
+import com.akash.agni.domain.Tip
 import com.akash.agni.health.HealthConnectManager
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -30,6 +31,9 @@ class TodayViewModel(private val c: AppContainer) : ViewModel() {
     private val _connected = MutableStateFlow(true)
     val connected = _connected.asStateFlow()
 
+    private val _tips = MutableStateFlow<List<Tip>>(emptyList())
+    val tips = _tips.asStateFlow()
+
     init {
         viewModelScope.launch {
             val journal = c.db.journal().forDay(LocalDate.now().toEpochDay())
@@ -37,6 +41,7 @@ class TodayViewModel(private val c: AppContainer) : ViewModel() {
                 .collectLatest { (s, h, j) ->
                     delay(600) // let bursts of edits settle
                     c.engine.syncAwards(s, h?.steps, j?.text?.isNotBlank() == true)
+                    _tips.value = runCatching { c.coach.tips(s.settings, s) }.getOrDefault(emptyList())
                 }
         }
     }

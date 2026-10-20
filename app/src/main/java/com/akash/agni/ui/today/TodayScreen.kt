@@ -57,6 +57,7 @@ import com.akash.agni.ui.goTab
 import com.akash.agni.ui.startWorkout
 import com.akash.agni.ui.theme.NumberStyle
 import com.akash.agni.update.UpdateCard
+import com.akash.agni.ui.coach.CoachCard
 import java.time.LocalTime
 import java.time.format.DateTimeFormatter
 import kotlin.math.abs
@@ -69,6 +70,7 @@ fun TodayScreen(nav: NavHostController) {
     val snap by vm.snapshot.collectAsStateWithLifecycle()
     val health by vm.health.collectAsStateWithLifecycle()
     val connected by vm.connected.collectAsStateWithLifecycle()
+    val tips by vm.tips.collectAsStateWithLifecycle()
 
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { vm.refresh() }
     LaunchedEffect(Unit) { vm.refresh() }
@@ -122,6 +124,8 @@ fun TodayScreen(nav: NavHostController) {
         }
 
         WorkoutCard(s, onStart = { id -> nav.startWorkout(id) }, onPlan = { nav.goTab("workout") })
+
+        CoachCard(tips, onSeeAll = { nav.navigate("coach") })
         Spacer(Modifier.height(8.dp))
     }
 }

@@ -50,6 +50,10 @@ Every push to `main` builds an APK and a Play bundle (.aab) on GitHub Actions an
 - **Versions**: libraries are pinned (AGP 8.7.3, Kotlin 2.1.0, Health Connect `1.1.0-alpha10`). Newer Health Connect releases changed how record `Metadata` is created; if you upgrade it, replace `Metadata(clientRecordId = …)` with `Metadata.manualEntry(clientRecordId = …)` and add `metadata = Metadata.manualEntry()` to the weight and exercise records in `health/HealthConnectManager.kt`.
 - This was written without an Android SDK available to compile it, so expect a few small fixes on the first build. Paste any build error back to me.
 
+## Coach
+
+Today shows the top suggestions; tap **See all** for the full list. Suggestions are fixed rules over the last 7 finished days: calories vs target (with your biggest calorie sources), protein gap with vegetarian/egg ideas, carb- and fat-heavy days (framed as swaps), farsan/treats, sweet chai, heavy dinners, weekend spikes, strength sessions, steps, weight-loss pace (too fast / plateau) and sleep from the journal. Rules live in `domain/Coach.kt`.
+
 ## Units
 
 Settings › Units switches body and lifting weight between kg and lb, and height and measurements between inches and cm. The check-in dialog has its own unit chips, converts anything already typed and remembers your choice. Everything is stored as kg / inches / cm underneath, so switching never changes your history.
