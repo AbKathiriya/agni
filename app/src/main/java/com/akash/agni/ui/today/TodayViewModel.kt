@@ -48,9 +48,12 @@ class TodayViewModel(private val c: AppContainer) : ViewModel() {
 
     fun refresh() = viewModelScope.launch {
         _connected.value = c.health.status() == HealthConnectManager.Status.AVAILABLE && c.health.hasAll()
-        _health.value = c.health.today()
+        val bmr = c.engine.currentBmr()
+        _health.value = c.health.today(bmr)
         importWeightFromHealth()
         c.importer.sync()
+        // Watch data may have just arrived with the import; read the day's burn again.
+        _health.value = c.health.today(bmr) ?: _health.value
     }
 
     /** Pulls a newer weigh-in (e.g. from a Samsung Health scale entry) into the progress log. */

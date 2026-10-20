@@ -37,9 +37,18 @@ class ActivityImporter(
         val since = LocalDate.ofEpochDay(fromDay).atStartOfDay(zone).toInstant()
         val dao = db.workouts()
         var added = 0
+        val weight = db.measurements().all().first().lastOrNull { it.weightKg != null }?.weightKg ?: s.startWeightKg
+        val bmr = Targets.bmr(s, weight)
 
-        for (w in health.externalWorkouts(since)) {
-            if (dao.byExternalId(w.id) != null) continue
+        for (w in health.externalWorkouts(since, bmr)) {
+            val existing = dao.byExternalId(w.id)
+            if (existing != null) {
+                // Fill in stats that weren't synced yet (or weren't readable) the first time.
+                if (!existing.hidden && (existing.kcal == null || existing.avgHr == null) && (w.kcal != null || w.avgHr != null)) {
+                    dao.update(existing.copy(kcal = existing.kcal ?: w.kcal, avgHr = existing.avgHr ?: w.avgHr))
+                }
+                continue
+            }
             val start = w.start.toEpochMilli()
             val end = w.end.toEpochMilli()
             val day = w.start.atZone(zone).toLocalDate()

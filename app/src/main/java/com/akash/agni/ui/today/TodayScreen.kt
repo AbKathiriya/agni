@@ -170,7 +170,9 @@ private fun CalorieCard(s: Snapshot, burned: Double?) {
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 KeyValue("Eaten", s.eaten.kcal())
                 KeyValue("Target", s.target.commas())
-                KeyValue("Burned", burned?.kcal() ?: "—")
+                // Never show less than what today's logged workouts burned.
+                val shown = maxOf(burned ?: 0.0, s.todayWorkoutKcal)
+                KeyValue("Burned", if (burned == null && s.todayWorkoutKcal == 0.0) "—" else shown.kcal())
             }
         }
         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)

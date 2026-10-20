@@ -14,6 +14,7 @@ import com.akash.agni.data.XpEvent
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
 import java.time.LocalDate
 import kotlin.math.roundToInt
@@ -79,6 +80,8 @@ data class Snapshot(
     val measurements: List<Measurement>,
     val rewards: List<RewardProgress>,
     val workoutsDone: Int,
+    /** Calories from today's workouts (Agni and watch), as a floor for "Burned". */
+    val todayWorkoutKcal: Double = 0.0,
 ) {
     val left get() = target - eaten.roundToInt()
     val treatProgress get() = (bank.toFloat() / settings.treatKcal).coerceIn(0f, 1f)
@@ -199,6 +202,7 @@ class Engine(private val db: AgniDatabase, private val settingsStore: SettingsSt
             measurements = measurements,
             rewards = rewardProgress,
             workoutsDone = workoutsDone,
+            todayWorkoutKcal = sessions.filter { it.day == todayEpoch }.sumOf { it.kcal ?: 0.0 },
         )
     }
 
@@ -229,6 +233,13 @@ class Engine(private val db: AgniDatabase, private val settingsStore: SettingsSt
 
     suspend fun awardWorkout(day: Long, workout: Workout) =
         db.xp().award(XpEvent(day = day, type = "workout", xp = workout.xp))
+
+    /** Resting burn per day for the latest weight; used to turn "total" calories into "active" ones. */
+    suspend fun currentBmr(): Double {
+        val s = settingsStore.settings.first()
+        val w = db.measurements().all().first().lastOrNull { it.weightKg != null }?.weightKg ?: s.startWeightKg
+        return Targets.bmr(s, w)
+    }
 
     suspend fun awardMeasurement(day: LocalDate) {
         val weekStart = day.minusDays((day.dayOfWeek.value - 1).toLong()).toEpochDay()

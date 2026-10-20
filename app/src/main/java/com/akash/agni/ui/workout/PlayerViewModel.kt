@@ -223,7 +223,7 @@ class PlayerViewModel(private val c: AppContainer, private val appContext: Conte
         viewModelScope.launch {
             val end = Instant.now()
             val completed = sets.size * 2 >= totalSets
-            val stats = c.health.sessionStats(startedAt, end)
+            val stats = c.health.sessionStats(startedAt, end, c.engine.currentBmr())
             val day = LocalDate.now().toEpochDay()
             val id = c.db.workouts().insertSession(
                 WorkoutSession(
