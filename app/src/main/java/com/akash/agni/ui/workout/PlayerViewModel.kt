@@ -38,8 +38,6 @@ data class PlayerState(
     val hint: String? = null,
     val switchSides: Boolean = false,
     val heartRate: Int? = null,
-    val gifUrl: String? = null,
-    val gifLoading: Boolean = true,
     val elapsedSec: Int = 0,
     val setsDone: Int = 0,
     val nextBlockIndex: Int = 0,
@@ -121,10 +119,10 @@ class PlayerViewModel(private val c: AppContainer, private val appContext: Conte
         if (set == 1) loadBlockContext(b)
     }
 
-    /** Pre-fills last weight used and suggests progression; fetches the demo GIF. */
+    /** Pre-fills last weight used and suggests progression. */
     private fun loadBlockContext(b: Block) {
         mediaJob?.cancel()
-        _state.update { it.copy(gifUrl = null, gifLoading = true, hint = null) }
+        _state.update { it.copy(hint = null) }
         mediaJob = viewModelScope.launch {
             if (b.kind == Kind.REPS) {
                 val recent = c.db.workouts().recentSets(b.exerciseId)
@@ -141,8 +139,6 @@ class PlayerViewModel(private val c: AppContainer, private val appContext: Conte
                 }
                 _state.update { it.copy(weightKg = if (hitTop) lastWeight + 2.5 else lastWeight, hint = hint) }
             }
-            val url = c.media.gifUrl(b.exercise)
-            _state.update { it.copy(gifUrl = url, gifLoading = false) }
         }
     }
 

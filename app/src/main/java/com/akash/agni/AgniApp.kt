@@ -3,7 +3,6 @@ package com.akash.agni
 import android.app.Application
 import android.content.Context
 import com.akash.agni.data.AgniDatabase
-import com.akash.agni.data.ExerciseMediaRepository
 import com.akash.agni.data.Seeder
 import com.akash.agni.data.SettingsStore
 import com.akash.agni.domain.Engine
@@ -19,7 +18,6 @@ class AppContainer(context: Context) {
     val db = AgniDatabase.build(context)
     val settings = SettingsStore(context)
     val health = HealthConnectManager(context)
-    val media = ExerciseMediaRepository(db.exerciseMedia())
     val engine = Engine(db, settings)
 
     init {

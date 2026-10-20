@@ -21,24 +21,37 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@v4
 
-      - name: Build release APK
+      - name: Build release APK and Play bundle
+        env:
+          AGNI_KEYSTORE_PASSWORD: ${{ secrets.AGNI_KEYSTORE_PASSWORD }}
         run: |
           chmod +x gradlew
-          ./gradlew assembleRelease --stacktrace
+          ./gradlew assembleRelease bundleRelease --stacktrace
 
-      - name: Rename APK
-        run: cp app/build/outputs/apk/release/app-release.apk agni-${{ github.run_number }}.apk
+      - name: Collect outputs
+        env:
+          AGNI_KEYSTORE_PASSWORD: ${{ secrets.AGNI_KEYSTORE_PASSWORD }}
+        run: |
+          cp app/build/outputs/apk/release/app-release.apk agni-${{ github.run_number }}.apk
+          cp app/build/outputs/bundle/release/app-release.aab agni-${{ github.run_number }}.aab
+          if [ -n "$AGNI_KEYSTORE_PASSWORD" ]; then echo "SIGNED=upload key" >> $GITHUB_ENV; else echo "SIGNED=temporary debug key (add the AGNI_KEYSTORE_PASSWORD secret)" >> $GITHUB_ENV; fi
 
       - uses: actions/upload-artifact@v4
         with:
           name: agni-apk
-          path: agni-${{ github.run_number }}.apk
+          path: |
+            agni-${{ github.run_number }}.apk
+            agni-${{ github.run_number }}.aab
 
       - name: Publish release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: build-${{ github.run_number }}
           name: Agni build ${{ github.run_number }}
-          body: Open this page on your phone, tap the .apk below to download, then install it.
-          files: agni-${{ github.run_number }}.apk
+          body: |
+            Open this page on your phone, tap the .apk below to download, then install it.
+            The .aab is for Google Play. Signed with: ${{ env.SIGNED }}
+          files: |
+            agni-${{ github.run_number }}.apk
+            agni-${{ github.run_number }}.aab
           make_latest: true

@@ -1,3 +1,8 @@
+// Every GitHub Actions run bumps the version so installs and Play uploads always move forward.
+val buildNumber = System.getenv("GITHUB_RUN_NUMBER")?.toIntOrNull() ?: 1
+// Password for signing/agni-upload.jks, provided as the AGNI_KEYSTORE_PASSWORD repo secret.
+val keystorePassword: String? = System.getenv("AGNI_KEYSTORE_PASSWORD")?.takeIf { it.isNotBlank() }
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
@@ -13,16 +18,28 @@ android {
         applicationId = "com.akash.agni"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = buildNumber
+        versionName = "0.1.$buildNumber"
+    }
+
+    signingConfigs {
+        if (keystorePassword != null) {
+            create("upload") {
+                storeFile = rootProject.file("signing/agni-upload.jks")
+                storePassword = keystorePassword
+                keyAlias = "agni"
+                keyPassword = keystorePassword
+            }
+        }
     }
 
     buildTypes {
         release {
             isMinifyEnabled = false
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
-            // Personal sideload build: signs with the debug key so `assembleRelease` installs directly.
-            signingConfig = signingConfigs.getByName("debug")
+            // Signed with the fixed upload key when the secret is present, so each new APK installs
+            // over the last one (and the same key works for Google Play). Falls back to the debug key.
+            signingConfig = signingConfigs.findByName("upload") ?: signingConfigs.getByName("debug")
         }
     }
 

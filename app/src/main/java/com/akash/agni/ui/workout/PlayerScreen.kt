@@ -1,8 +1,5 @@
 package com.akash.agni.ui.workout
 
-import android.content.Intent
-import android.net.Uri
-import android.os.Build
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -46,7 +43,11 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.animation.Crossfade
+import androidx.compose.animation.core.tween
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -54,7 +55,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
@@ -62,10 +62,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
-import coil.ImageLoader
 import coil.compose.AsyncImage
-import coil.decode.GifDecoder
-import coil.decode.ImageDecoderDecoder
+import kotlinx.coroutines.delay
 import com.akash.agni.container
 import com.akash.agni.data.Block
 import com.akash.agni.data.Kind
@@ -84,6 +82,7 @@ fun PlayerScreen(workoutId: String, onExit: () -> Unit) {
     }
     val s by vm.state.collectAsStateWithLifecycle()
     var confirmExit by remember { mutableStateOf(false) }
+    var videoUrl by remember { mutableStateOf<String?>(null) }
 
     // Keep the screen on while training.
     val view = LocalView.current
@@ -102,6 +101,8 @@ fun PlayerScreen(workoutId: String, onExit: () -> Unit) {
             dismissButton = { TextButton(onClick = { confirmExit = false }) { Text("Keep going") } },
         )
     }
+
+    videoUrl?.let { VideoDialog(it, onClose = { videoUrl = null }) }
 
     val summary = s.summary
     if (s.phase == Phase.DONE) {
@@ -140,7 +141,7 @@ fun PlayerScreen(workoutId: String, onExit: () -> Unit) {
             }
         }
 
-        DemoMedia(shownBlock, gifUrl = if (s.phase == Phase.REST) null else s.gifUrl, loading = s.gifLoading && s.phase != Phase.REST)
+        DemoMedia(shownBlock, onVideo = { videoUrl = shownBlock.exercise.youtubeUrl })
 
         Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
             if (s.phase == Phase.REST) Muted("Up next")
@@ -189,32 +190,34 @@ private fun HeartChip(bpm: Int?) {
 }
 
 @Composable
-private fun DemoMedia(block: Block, gifUrl: String?, loading: Boolean) {
-    val context = LocalContext.current
-    val loader = remember {
-        ImageLoader.Builder(context).components {
-            if (Build.VERSION.SDK_INT >= 28) add(ImageDecoderDecoder.Factory()) else add(GifDecoder.Factory())
-        }.build()
+private fun DemoMedia(block: Block, onVideo: () -> Unit) {
+    val frames = block.exercise.frames
+    var frame by remember(block.exerciseId) { mutableIntStateOf(0) }
+    // Alternate start and end position photos so the movement reads like a slow animation.
+    LaunchedEffect(block.exerciseId) {
+        if (frames.size > 1) while (true) {
+            delay(1100)
+            frame = (frame + 1) % frames.size
+        }
     }
     Box(
         Modifier.fillMaxWidth().aspectRatio(16f / 10f).clip(RoundedCornerShape(20.dp))
-            .background(if (gifUrl != null) Color.White else MaterialTheme.colorScheme.surfaceVariant),
+            .background(MaterialTheme.colorScheme.surfaceVariant),
         contentAlignment = Alignment.Center,
     ) {
-        when {
-            gifUrl != null -> AsyncImage(
-                model = gifUrl, imageLoader = loader, contentDescription = "${block.exercise.name} demonstration",
-                contentScale = ContentScale.Fit, modifier = Modifier.fillMaxSize(),
-            )
-            loading -> CircularProgressIndicator()
-            else -> Icon(Icons.Rounded.PlayCircle, null, Modifier.size(56.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+        if (frames.isEmpty()) {
+            Icon(Icons.Rounded.PlayCircle, null, Modifier.size(56.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+        } else {
+            Crossfade(targetState = frame, animationSpec = tween(350), label = "exercise frames") { i ->
+                AsyncImage(
+                    model = frames[i],
+                    contentDescription = "${block.exercise.name}, " + if (i == 0) "start position" else "end position",
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize(),
+                )
+            }
         }
-        FilledTonalButton(
-            onClick = {
-                context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(block.exercise.youtubeUrl)))
-            },
-            modifier = Modifier.align(Alignment.BottomEnd).padding(10.dp),
-        ) {
+        FilledTonalButton(onClick = onVideo, modifier = Modifier.align(Alignment.BottomEnd).padding(10.dp)) {
             Icon(Icons.Rounded.SmartDisplay, null, Modifier.size(18.dp))
             Spacer(Modifier.width(6.dp))
             Text("Video")

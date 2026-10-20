@@ -11,11 +11,15 @@ data class Exercise(
     val muscles: String,
     val equipment: String,
     val cues: List<String>,
-    /** Search term for the ExerciseDB GIF lookup. */
-    val gifQuery: String,
+    /** Folder in assets/exercises (start and end photos, from the public-domain free-exercise-db). */
+    val imageId: String?,
 ) {
+    /** Two frames (start, end position) that the player alternates to show the movement. */
+    val frames: List<String>
+        get() = imageId?.let { listOf("file:///android_asset/exercises/$it/0.jpg", "file:///android_asset/exercises/$it/1.jpg") }.orEmpty()
+
     val youtubeUrl: String
-        get() = "https://www.youtube.com/results?search_query=" +
+        get() = "https://m.youtube.com/results?search_query=" +
             URLEncoder.encode("$name proper form tutorial", "UTF-8")
 }
 
@@ -53,53 +57,53 @@ data class Workout(
 object Exercises {
     val all = listOf(
         Exercise("bike_warmup", "Easy bike warm-up", "Warm-up", "Stationary bike",
-            listOf("Easy pace: you can talk in full sentences", "Raise cadence slowly over 5 minutes"), "stationary bike"),
+            listOf("Easy pace: you can talk in full sentences", "Raise cadence slowly over 5 minutes"), "Bicycling_Stationary"),
         Exercise("goblet_squat", "Goblet squat", "Quads, glutes, core", "Dumbbell",
-            listOf("Hold the dumbbell at your chest, elbows down", "Sit down between your heels, chest up", "Knees track over your toes"), "goblet squat"),
+            listOf("Hold the dumbbell at your chest, elbows down", "Sit down between your heels, chest up", "Knees track over your toes"), "Goblet_Squat"),
         Exercise("db_rdl", "Romanian deadlift", "Hamstrings, glutes", "Dumbbells",
-            listOf("Soft knees, push your hips back", "Dumbbells slide close to your legs", "Stop at a hamstring stretch with a flat back"), "dumbbell romanian deadlift"),
+            listOf("Soft knees, push your hips back", "Dumbbells slide close to your legs", "Stop at a hamstring stretch with a flat back"), "Romanian_Deadlift"),
         Exercise("walking_lunge", "Walking lunge", "Quads, glutes", "Dumbbells",
-            listOf("Long step, back knee drops toward the floor", "Front knee stays over mid-foot", "Push through the front heel"), "dumbbell lunge"),
+            listOf("Long step, back knee drops toward the floor", "Front knee stays over mid-foot", "Push through the front heel"), "Dumbbell_Lunges"),
         Exercise("hip_thrust", "Hip thrust", "Glutes", "Barbell or machine",
-            listOf("Upper back on the bench, chin tucked", "Drive through heels, squeeze glutes at the top", "Ribs down, don't arch your lower back"), "hip thrust"),
+            listOf("Upper back on the bench, chin tucked", "Drive through heels, squeeze glutes at the top", "Ribs down, don't arch your lower back"), "Barbell_Hip_Thrust"),
         Exercise("leg_curl", "Seated leg curl", "Hamstrings", "Machine",
-            listOf("Pad just above your heels", "Curl fully, control the way back"), "lever seated leg curl"),
+            listOf("Pad just above your heels", "Curl fully, control the way back"), "Seated_Leg_Curl"),
         Exercise("leg_press", "Leg press", "Quads, glutes", "Machine",
-            listOf("Feet shoulder width, middle of the platform", "Lower until knees are near 90°, back stays on the pad", "Don't lock your knees at the top"), "leg press"),
+            listOf("Feet shoulder width, middle of the platform", "Lower until knees are near 90°, back stays on the pad", "Don't lock your knees at the top"), "Leg_Press"),
         Exercise("step_up", "Dumbbell step-up", "Glutes, quads", "Dumbbells + bench",
-            listOf("Whole foot on the box", "Drive up with the front leg, don't push off the back one"), "dumbbell step-up"),
+            listOf("Whole foot on the box", "Drive up with the front leg, don't push off the back one"), "Dumbbell_Step_Ups"),
         Exercise("glute_bridge", "Glute bridge", "Glutes", "Bodyweight",
-            listOf("Feet close to your hips", "Squeeze glutes and hold 1 second at the top"), "glute bridge"),
+            listOf("Feet close to your hips", "Squeeze glutes and hold 1 second at the top"), "Butt_Lift_Bridge"),
         Exercise("lat_pulldown", "Lat pulldown", "Back, biceps", "Cable",
-            listOf("Pull the bar to your upper chest", "Drive elbows down and back", "Don't lean back much"), "cable pulldown"),
+            listOf("Pull the bar to your upper chest", "Drive elbows down and back", "Don't lean back much"), "Wide-Grip_Lat_Pulldown"),
         Exercise("db_bench", "Dumbbell bench press", "Chest, shoulders, triceps", "Dumbbells + bench",
-            listOf("Shoulder blades pinched together", "Lower to chest level, elbows about 45°"), "dumbbell bench press"),
+            listOf("Shoulder blades pinched together", "Lower to chest level, elbows about 45°"), "Dumbbell_Bench_Press"),
         Exercise("cable_row", "Seated cable row", "Back", "Cable",
-            listOf("Sit tall, pull to your lower ribs", "Squeeze shoulder blades, slow return"), "cable seated row"),
+            listOf("Sit tall, pull to your lower ribs", "Squeeze shoulder blades, slow return"), "Seated_Cable_Rows"),
         Exercise("db_shoulder_press", "Seated shoulder press", "Shoulders", "Dumbbells",
-            listOf("Brace your core, don't arch", "Press up and slightly in"), "dumbbell seated shoulder press"),
+            listOf("Brace your core, don't arch", "Press up and slightly in"), "Dumbbell_Shoulder_Press"),
         Exercise("db_row", "One-arm dumbbell row", "Back", "Dumbbell + bench",
-            listOf("Flat back, hand and knee on the bench", "Pull your elbow toward your hip"), "dumbbell one arm bent-over row"),
+            listOf("Flat back, hand and knee on the bench", "Pull your elbow toward your hip"), "One-Arm_Dumbbell_Row"),
         Exercise("incline_pushup", "Incline push-up", "Chest, triceps, core", "Bench",
-            listOf("Body in one straight line", "Lower chest to the bench edge, push away"), "incline push-up"),
+            listOf("Body in one straight line", "Lower chest to the bench edge, push away"), "Incline_Push-Up"),
         Exercise("dead_bug", "Dead bug", "Core", "Mat",
-            listOf("Lower back pressed into the floor", "Extend opposite arm and leg slowly", "Exhale as you extend"), "dead bug"),
+            listOf("Lower back pressed into the floor", "Extend opposite arm and leg slowly", "Exhale as you extend"), "Dead_Bug"),
         Exercise("plank", "Plank", "Core", "Mat",
-            listOf("Elbows under shoulders", "Squeeze glutes, ribs down", "Keep breathing"), "front plank"),
+            listOf("Elbows under shoulders", "Squeeze glutes, ribs down", "Keep breathing"), "Plank"),
         Exercise("side_plank", "Side plank", "Obliques", "Mat",
-            listOf("Hips high, body in a straight line", "Stack or stagger your feet"), "side plank"),
+            listOf("Hips high, body in a straight line", "Stack or stagger your feet"), "Side_Bridge"),
         Exercise("pallof_press", "Pallof press", "Core, obliques", "Cable or band",
-            listOf("Stand side-on to the cable", "Press straight out and resist the twist", "Hold 2 seconds"), "pallof press"),
+            listOf("Stand side-on to the cable", "Press straight out and resist the twist", "Hold 2 seconds"), "Pallof_Press"),
         Exercise("bird_dog", "Bird dog", "Core, glutes", "Mat",
-            listOf("Reach long, don't rotate your hips", "Pause at full extension"), "bird dog"),
+            listOf("Reach long, don't rotate your hips", "Pause at full extension"), null),
         Exercise("bike_intervals", "Bike intervals", "Conditioning", "Stationary bike",
-            listOf("30 seconds hard, 60 seconds easy", "Hard means you can't talk"), "stationary bike"),
+            listOf("30 seconds hard, 60 seconds easy", "Hard means you can't talk"), "Bicycling_Stationary"),
         Exercise("rower", "Rowing machine", "Conditioning, back, legs", "Rower",
-            listOf("Legs, then hips, then arms", "Steady pace, 22–26 strokes a minute"), "rowing"),
+            listOf("Legs, then hips, then arms", "Steady pace, 22–26 strokes a minute"), "Rowing_Stationary"),
         Exercise("incline_walk", "Incline treadmill walk", "Fat burning (zone 2)", "Treadmill",
-            listOf("Incline 8–12%, speed 4.5–5.5 km/h", "Don't hold the rails", "You can talk, but not sing"), "walking on incline treadmill"),
+            listOf("Incline 8–12%, speed 4.5–5.5 km/h", "Don't hold the rails", "You can talk, but not sing"), "Walking_Treadmill"),
         Exercise("long_walk", "Brisk outdoor walk", "Fat burning (zone 2)", "None",
-            listOf("Brisk pace, swing your arms", "Good one to do with family"), "walking"),
+            listOf("Brisk pace, swing your arms", "Good one to do with family"), "Trail_Running_Walking"),
     )
     val byId = all.associateBy { it.id }
 }
