@@ -8,6 +8,7 @@ import com.akash.agni.data.SettingsStore
 import com.akash.agni.domain.ActivityImporter
 import com.akash.agni.domain.Coach
 import com.akash.agni.domain.Engine
+import com.akash.agni.domain.Schedule
 import com.akash.agni.health.HealthConnectManager
 import com.akash.agni.update.Updater
 import kotlinx.coroutines.CoroutineScope
@@ -25,6 +26,7 @@ class AppContainer(context: Context) {
     val updater = Updater(context)
     val importer = ActivityImporter(db, health, settings)
     val coach = Coach(db, health)
+    val schedule = Schedule(settings)
 
     init {
         scope.launch {

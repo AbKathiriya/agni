@@ -29,6 +29,7 @@ import androidx.compose.material.icons.rounded.DeleteOutline
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.Watch
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.FilledTonalIconButton
@@ -72,11 +73,15 @@ class WorkoutViewModel(private val c: AppContainer) : ViewModel() {
     val history = c.db.workouts().recent().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
     val settings = c.settings.settings.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), Settings())
 
+    private val _weightKg = MutableStateFlow(80.0)
+    val weightKg = _weightKg.asStateFlow()
+
     private val _steps = MutableStateFlow<List<Pair<LocalDate, Long>>>(emptyList())
     val steps = _steps.asStateFlow()
 
     /** Pulls new watch workouts and the week's steps from Health Connect. */
     fun refresh() = viewModelScope.launch {
+        _weightKg.value = c.engine.currentWeightKg()
         c.importer.sync()
         _steps.value = c.health.stepsByDay(7)
     }
@@ -107,9 +112,12 @@ fun WorkoutScreen(nav: NavHostController) {
     val steps by vm.steps.collectAsStateWithLifecycle()
     val settings by vm.settings.collectAsStateWithLifecycle()
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { vm.refresh() }
-    val today = LocalDate.now().dayOfWeek
-    var expanded by remember { mutableStateOf<DayOfWeek?>(today) }
+    val today = LocalDate.now()
+    var expanded by remember { mutableStateOf<LocalDate?>(today) }
     var deleting by remember { mutableStateOf<WorkoutSession?>(null) }
+    var changing by remember { mutableStateOf<LocalDate?>(null) }
+    var logging by remember { mutableStateOf(false) }
+    val weightKg by vm.weightKg.collectAsStateWithLifecycle()
 
     LazyColumn(
         Modifier.fillMaxSize(),
@@ -117,19 +125,26 @@ fun WorkoutScreen(nav: NavHostController) {
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         item {
-            Text("This week", style = MaterialTheme.typography.headlineSmall)
-            Muted("3 strength days for shape, cardio days for fat burning. Add weight once you hit the top of the rep range on every set.")
+            Text("Next 7 days", style = MaterialTheme.typography.headlineSmall)
+            Muted("Playing a sport or short on time? Tap Change on any day to swap it, move it, or replace it.")
         }
-        items(DayOfWeek.values().toList()) { day ->
-            val w = Plan.forDay(day)
+        items((0L..6L).map { today.plusDays(it) }, key = { it.toEpochDay() }) { date ->
+            val w = Plan.forDate(date, settings.planOverrides)
             DayCard(
-                day = day,
-                isToday = day == today,
+                date = date,
+                isToday = date == today,
                 workout = w,
-                expanded = expanded == day,
-                onToggle = { expanded = if (expanded == day) null else day },
+                changed = settings.planOverrides.containsKey(date.toEpochDay()),
+                expanded = expanded == date,
+                onToggle = { expanded = if (expanded == date) null else date },
                 onStart = { w?.let { nav.startWorkout(it.id) } },
+                onChange = { changing = date },
             )
+        }
+        item {
+            OutlinedButton(onClick = { logging = true }, modifier = Modifier.fillMaxWidth()) {
+                Text("Log a sport or activity (no watch)")
+            }
         }
         if (steps.isNotEmpty()) {
             item { StepsCard(steps, settings.stepGoal) }
@@ -146,6 +161,15 @@ fun WorkoutScreen(nav: NavHostController) {
                 HistoryRow(session, onDelete = { deleting = session })
             }
         }
+    }
+
+    changing?.let { date -> ChangeDaySheet(date, settings.planOverrides, onDismiss = { changing = null }) }
+    if (logging) {
+        LogActivityDialog(
+            initialName = Plan.forDate(today, settings.planOverrides)?.takeIf { it.id == Plan.activity.id }?.title ?: "Badminton",
+            weightKg = weightKg,
+            onDismiss = { logging = false },
+        )
     }
 
     deleting?.let { session ->
@@ -211,8 +235,8 @@ private fun dateTime(s: WorkoutSession): String =
 private fun HistoryRow(session: WorkoutSession, onDelete: () -> Unit) {
     val minutes = ((session.endedAt - session.startedAt) / 60_000).coerceAtLeast(0)
     val status = when {
-        session.imported && session.completed -> "Counts for today's plan"
-        session.imported -> "Logged"
+        (session.imported || session.workoutId == "manual") && session.completed -> "Counts for the day's plan"
+        session.imported || session.workoutId == "manual" -> "Logged"
         session.completed -> "Completed"
         else -> "Partial"
     }
@@ -247,12 +271,14 @@ private fun HistoryRow(session: WorkoutSession, onDelete: () -> Unit) {
 
 @Composable
 private fun DayCard(
-    day: DayOfWeek,
+    date: LocalDate,
     isToday: Boolean,
     workout: Workout?,
+    changed: Boolean,
     expanded: Boolean,
     onToggle: () -> Unit,
     onStart: () -> Unit,
+    onChange: () -> Unit,
 ) {
     AgniCard(
         onClick = onToggle,
@@ -260,11 +286,15 @@ private fun DayCard(
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
-                Muted(day.getDisplayName(TextStyle.FULL, Locale.getDefault()) + if (isToday) " · Today" else "")
+                Muted(
+                    date.dayOfWeek.getDisplayName(TextStyle.FULL, Locale.getDefault()) +
+                        (if (isToday) " · Today" else "") + if (changed) " · Changed" else ""
+                )
                 Text(workout?.title ?: "Rest", style = MaterialTheme.typography.titleMedium)
                 if (workout != null) Muted(workout.summary, style = MaterialTheme.typography.bodySmall)
             }
-            if (workout != null) {
+            TextButton(onClick = onChange) { Text("Change") }
+            if (workout != null && workout.id != Plan.activity.id) {
                 FilledTonalIconButton(onClick = onStart) {
                     Icon(Icons.Rounded.PlayArrow, contentDescription = "Start ${workout.title}")
                 }

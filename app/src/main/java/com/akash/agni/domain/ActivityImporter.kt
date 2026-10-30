@@ -69,13 +69,31 @@ class ActivityImporter(
             }
 
             val minutes = (end - start) / 60_000
-            val planned = Plan.forDay(day.dayOfWeek)
+            val planned = Plan.forDate(day, s.planOverrides)
             val counts = minutes >= 20 && (planned == null || planned.cardioOnly || w.type in strengthTypes)
             dao.insertSession(external(w, day.toEpochDay(), completed = counts, hidden = false))
             if (counts) db.xp().award(XpEvent(day = day.toEpochDay(), type = "workout", xp = planned?.xp ?: 30))
             added++
         }
         added
+    }
+
+    /** A sport or activity you log by hand (no watch). [kcal] is the estimate shown in the dialog. */
+    suspend fun logManual(date: LocalDate, name: String, minutes: Int, kcal: Double) = lock.withLock {
+        val s = settings.settings.first()
+        val zone = ZoneId.systemDefault()
+        val end = if (date == LocalDate.now()) java.time.Instant.now() else date.atTime(19, 0).atZone(zone).toInstant()
+        val start = end.minusSeconds(minutes * 60L)
+        val planned = Plan.forDate(date, s.planOverrides)
+        val counts = minutes >= 20 && (planned == null || planned.cardioOnly)
+        db.workouts().insertSession(
+            WorkoutSession(
+                day = date.toEpochDay(), workoutId = "manual", title = name,
+                startedAt = start.toEpochMilli(), endedAt = end.toEpochMilli(),
+                kcal = kcal, completed = counts, source = "Logged by you",
+            )
+        )
+        if (counts) db.xp().award(XpEvent(day = date.toEpochDay(), type = "workout", xp = planned?.xp ?: 30))
     }
 
     private fun external(w: HealthConnectManager.ExternalWorkout, day: Long, completed: Boolean, hidden: Boolean) =

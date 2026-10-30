@@ -31,6 +31,8 @@ data class Settings(
     val startWeightKg: Double = 80.0,
     val weightUnit: WeightUnit = WeightUnit.KG,
     val lengthUnit: LengthUnit = LengthUnit.IN,
+    /** Per-date plan changes: epoch day -> workout id, "activity:<name>" or "rest". */
+    val planOverrides: Map<Long, String> = emptyMap(),
 )
 
 private val Context.dataStore by preferencesDataStore("settings")
@@ -52,6 +54,7 @@ class SettingsStore(private val context: Context) {
         val startWeight = doublePreferencesKey("start_weight")
         val weightUnit = stringPreferencesKey("weight_unit")
         val lengthUnit = stringPreferencesKey("length_unit")
+        val overrides = stringPreferencesKey("plan_overrides")
     }
 
     val settings: Flow<Settings> = context.dataStore.data.map(::read)
@@ -74,6 +77,10 @@ class SettingsStore(private val context: Context) {
             startWeightKg = p[K.startWeight] ?: d.startWeightKg,
             weightUnit = p[K.weightUnit]?.let { runCatching { WeightUnit.valueOf(it) }.getOrNull() } ?: d.weightUnit,
             lengthUnit = p[K.lengthUnit]?.let { runCatching { LengthUnit.valueOf(it) }.getOrNull() } ?: d.lengthUnit,
+            planOverrides = p[K.overrides].orEmpty().lines().mapNotNull { line ->
+                val (day, value) = line.split("=", limit = 2).takeIf { it.size == 2 } ?: return@mapNotNull null
+                day.toLongOrNull()?.let { it to value }
+            }.toMap(),
         )
     }
 
@@ -93,6 +100,10 @@ class SettingsStore(private val context: Context) {
         p[K.startWeight] = s.startWeightKg
         p[K.weightUnit] = s.weightUnit.name
         p[K.lengthUnit] = s.lengthUnit.name
+        // Keep a month of history so past streak days stay correct; drop older entries.
+        val keepFrom = LocalDate.now().toEpochDay() - 60
+        p[K.overrides] = s.planOverrides.filterKeys { it >= keepFrom }.entries
+            .joinToString("\n") { (day, v) -> "$day=" + v.replace("\n", " ") }
     }
 
     /** Pins the start day on first launch so streaks and the calorie bank have a fixed origin. */

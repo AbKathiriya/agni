@@ -145,7 +145,7 @@ class Engine(private val db: AgniDatabase, private val settingsStore: SettingsSt
             val eatenDay = dayLogs.sumOf { it.kcal }
             val logged = dayLogs.size >= 2
             val withinCalories = eatenDay <= target * 1.1 || eatenDay <= target + runningBank
-            val trained = Plan.forDay(date.dayOfWeek) == null || d in sessionDays
+            val trained = Plan.forDate(date, s.planOverrides) == null || d in sessionDays
             val onTrack = logged && withinCalories && trained
             if (logged) runningBank += target - eatenDay.roundToInt()
 
@@ -192,7 +192,7 @@ class Engine(private val db: AgniDatabase, private val settingsStore: SettingsSt
             carbs = todayLogs.sumOf { it.carbs },
             fat = todayLogs.sumOf { it.fat },
             bank = bank,
-            todaysWorkout = Plan.forDay(today.dayOfWeek),
+            todaysWorkout = Plan.forDate(today, s.planOverrides),
             workoutDoneToday = todayEpoch in sessionDays,
             sessionsThisWeek = sessions.count { it.completed && it.day >= weekStart },
             streak = streak,
@@ -235,6 +235,11 @@ class Engine(private val db: AgniDatabase, private val settingsStore: SettingsSt
         db.xp().award(XpEvent(day = day, type = "workout", xp = workout.xp))
 
     /** Resting burn per day for the latest weight; used to turn "total" calories into "active" ones. */
+    suspend fun currentWeightKg(): Double {
+        val s = settingsStore.settings.first()
+        return db.measurements().all().first().lastOrNull { it.weightKg != null }?.weightKg ?: s.startWeightKg
+    }
+
     suspend fun currentBmr(): Double {
         val s = settingsStore.settings.first()
         val w = db.measurements().all().first().lastOrNull { it.weightKg != null }?.weightKg ?: s.startWeightKg

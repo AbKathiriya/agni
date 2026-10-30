@@ -2,6 +2,7 @@ package com.akash.agni.data
 
 import java.net.URLEncoder
 import java.time.DayOfWeek
+import java.time.LocalDate
 
 enum class Kind { REPS, TIMED, CARDIO }
 
@@ -102,6 +103,10 @@ object Exercises {
             listOf("Steady pace you can hold for 8 minutes", "Stand upright, hands light on the rails, no leaning", "Push through the whole foot to work the glutes"), "Stairmaster"),
         Exercise("incline_walk", "Incline treadmill walk", "Fat burning (zone 2)", "Treadmill",
             listOf("Incline 8–12%, speed 4.5–5.5 km/h", "Don't hold the rails", "You can talk, but not sing"), "Walking_Treadmill"),
+        Exercise("free_activity", "Your activity", "Fat burning, fun", "Whatever you're playing",
+            listOf("Badminton, cricket, swimming, a hike: anything that keeps you moving for 30+ minutes counts",
+                "Start a workout on your watch so the calories and heart rate come into Agni",
+                "No watch? Log it from the Workout tab afterwards"), null),
         Exercise("long_walk", "Brisk outdoor walk", "Fat burning (zone 2)", "None",
             listOf("Brisk pace, swing your arms", "Good one to do with family"), "Trail_Running_Walking"),
     )
@@ -159,8 +164,36 @@ object Plan {
         listOf(Block("long_walk", Kind.CARDIO, sets = 1, seconds = 2700, restSec = 0)), cardioOnly = true
     )
 
-    val all = listOf(lowerCore, upperConditioning, fullBody, inclineWalk, longWalk)
+    /** A day you replaced with your own sport or activity. The title is set per day (e.g. "Badminton"). */
+    val activity = Workout(
+        "activity", "Your activity", 45, 30,
+        listOf(Block("free_activity", Kind.CARDIO, sets = 1, seconds = 2700, restSec = 0)), cardioOnly = true
+    )
+
+    val all = listOf(lowerCore, upperConditioning, fullBody, inclineWalk, longWalk, activity)
     val byId = all.associateBy { it.id }
+
+    /** What a day in the schedule can be: a plan workout id, "activity:<name>", or "rest". */
+    fun valueOf(w: Workout?): String = when {
+        w == null -> REST
+        w.id == activity.id -> "activity:" + w.title
+        else -> w.id
+    }
+
+    fun fromValue(value: String): Workout? = when {
+        value == REST -> null
+        value.startsWith("activity:") -> activity.copy(title = value.removePrefix("activity:").ifBlank { "Your activity" })
+        else -> byId[value]
+    }
+
+    /** The plan for a specific date, after any changes you made (swaps, activities, rest). */
+    fun forDate(date: LocalDate, overrides: Map<Long, String>): Workout? {
+        val v = overrides[date.toEpochDay()] ?: return forDay(date.dayOfWeek)
+        val known = v == REST || v.startsWith("activity:") || byId.containsKey(v)
+        return if (known) fromValue(v) else forDay(date.dayOfWeek)
+    }
+
+    const val REST = "rest"
 
     /** null = rest day. */
     fun forDay(day: DayOfWeek): Workout? = when (day) {

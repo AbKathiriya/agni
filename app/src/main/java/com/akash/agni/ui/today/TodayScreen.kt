@@ -57,6 +57,13 @@ import com.akash.agni.ui.goTab
 import com.akash.agni.ui.startWorkout
 import com.akash.agni.ui.theme.NumberStyle
 import com.akash.agni.update.UpdateCard
+import com.akash.agni.data.Plan
+import com.akash.agni.ui.workout.ChangeDaySheet
+import com.akash.agni.ui.workout.LogActivityDialog
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import com.akash.agni.ui.coach.CoachCard
 import java.time.LocalTime
 import java.time.format.DateTimeFormatter
@@ -71,6 +78,8 @@ fun TodayScreen(nav: NavHostController) {
     val health by vm.health.collectAsStateWithLifecycle()
     val connected by vm.connected.collectAsStateWithLifecycle()
     val tips by vm.tips.collectAsStateWithLifecycle()
+    var changingToday by remember { mutableStateOf(false) }
+    var loggingToday by remember { mutableStateOf(false) }
 
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { vm.refresh() }
     LaunchedEffect(Unit) { vm.refresh() }
@@ -123,7 +132,18 @@ fun TodayScreen(nav: NavHostController) {
             }
         }
 
-        WorkoutCard(s, onStart = { id -> nav.startWorkout(id) }, onPlan = { nav.goTab("workout") })
+        WorkoutCard(
+            s, onStart = { id -> nav.startWorkout(id) }, onPlan = { nav.goTab("workout") },
+            onChange = { changingToday = true }, onLog = { loggingToday = true },
+        )
+        if (changingToday) ChangeDaySheet(s.today, s.settings.planOverrides, onDismiss = { changingToday = false })
+        if (loggingToday) {
+            LogActivityDialog(
+                initialName = s.todaysWorkout?.takeIf { it.id == Plan.activity.id }?.title ?: "Badminton",
+                weightKg = s.currentWeight,
+                onDismiss = { loggingToday = false },
+            )
+        }
 
         CoachCard(tips, onSeeAll = { nav.navigate("coach") })
         Spacer(Modifier.height(8.dp))
@@ -195,10 +215,13 @@ private fun CalorieCard(s: Snapshot, burned: Double?) {
 }
 
 @Composable
-private fun WorkoutCard(s: Snapshot, onStart: (String) -> Unit, onPlan: () -> Unit) {
+private fun WorkoutCard(s: Snapshot, onStart: (String) -> Unit, onPlan: () -> Unit, onChange: () -> Unit, onLog: () -> Unit) {
     val w = s.todaysWorkout
     AgniCard(padding = 20.dp) {
-        Muted("Today's workout")
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Muted("Today's workout", Modifier.weight(1f))
+            TextButton(onClick = onChange) { Text("Change") }
+        }
         if (w == null) {
             Text("Rest day", style = MaterialTheme.typography.titleLarge)
             Muted("Recovery matters. A relaxed walk still counts toward your steps.")
@@ -206,6 +229,18 @@ private fun WorkoutCard(s: Snapshot, onStart: (String) -> Unit, onPlan: () -> Un
             return@AgniCard
         }
         Text(w.title, style = MaterialTheme.typography.titleLarge)
+        if (w.id == Plan.activity.id) {
+            if (s.workoutDoneToday) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Icon(Icons.Rounded.CheckCircle, null, tint = MaterialTheme.colorScheme.primary)
+                    Text("Done for today", style = MaterialTheme.typography.titleSmall)
+                }
+            } else {
+                Muted("Start a workout on your watch while you play and it'll come in automatically. No watch? Log it when you're done.")
+                Button(onClick = onLog, modifier = Modifier.fillMaxWidth().height(52.dp)) { Text("Log it manually") }
+            }
+            return@AgniCard
+        }
         Muted(w.summary)
         if (s.workoutDoneToday) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
